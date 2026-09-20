@@ -83,29 +83,48 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
     }
 
     suspend fun setBackupUri(context: Context, uri: String) {
+        // v1.13.0:必须先持久化目录授权,否则重启后备份目录失效
+        com.embertimer.data.BackupPermissions.persist(context, android.net.Uri.parse(uri))
         graph.settingsRepo.setBackupUri(uri)
         graph.settingsRepo.setAutoBackupEnabled(true)
         com.embertimer.data.AutoBackupScheduler.scheduleNow(context)
     }
 
     /** v1.9.13 手动备份:仅存目录(不启用自动备份),并立即写固定文件覆盖。@return 是否写入成功 */
-    suspend fun setBackupDir(uri: String): Boolean {
+    suspend fun setBackupDir(context: Context, uri: String): Boolean {
+        com.embertimer.data.BackupPermissions.persist(context, android.net.Uri.parse(uri))
         graph.settingsRepo.setBackupUri(uri)
         return backupNow()
     }
 
     /**
      * v1.9.13 手动备份:读已存目录,写固定文件(覆盖),不触发自动备份调度。
-     * @return 是否写入成功(目录未选/授权失效/写盘失败均为 false,由 UI 提示并引导重选目录)
+     * v1.13.0:写入前先确保持久化授权在(不在就补做);失败按错误码记录,便于设置页给出准确提示。
+     * @return 是否写入成功(目录未选/授权失效/写盘失败均为 false)
      */
     suspend fun backupNow(): Boolean {
         val uriStr = graph.settingsRepo.backupUri.first() ?: return false
+        val uri = android.net.Uri.parse(uriStr)
+        if (!com.embertimer.data.BackupPermissions.ensure(graph.appContext, uri)) {
+            graph.settingsRepo.setBackupError(com.embertimer.data.BackupError.PERMISSION)
+            return false
+        }
         val json = com.embertimer.data.DataTransfer.exportJson(graph.db)
-        val ok = runCatching {
-            com.embertimer.data.BackupWriter.write(graph.appContext, android.net.Uri.parse(uriStr), json)
-        }.getOrDefault(false)
-        if (ok) graph.settingsRepo.setBackupLastAt(System.currentTimeMillis())
-        return ok
+        return when (com.embertimer.data.BackupWriter.write(graph.appContext, uri, json)) {
+            com.embertimer.data.BackupWriteResult.OK -> {
+                graph.settingsRepo.setBackupLastAt(System.currentTimeMillis())
+                graph.settingsRepo.setBackupError(null)
+                true
+            }
+            com.embertimer.data.BackupWriteResult.PERMISSION_DENIED -> {
+                graph.settingsRepo.setBackupError(com.embertimer.data.BackupError.PERMISSION)
+                false
+            }
+            com.embertimer.data.BackupWriteResult.FAILED -> {
+                graph.settingsRepo.setBackupError(com.embertimer.data.BackupError.WRITE)
+                false
+            }
+        }
     }
 
     /**

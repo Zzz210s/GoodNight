@@ -152,6 +152,13 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                        // v1.13.0:提醒随系统静音/振动/响铃模式自动适配,强度只管振动节奏与铃声时长
+                        Text(
+                            stringResource(R.string.reminder_mode_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
                     }
                 }
             }

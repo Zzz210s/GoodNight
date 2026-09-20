@@ -80,7 +80,13 @@ class ServiceNotifier(
     fun remind(workFinished: Boolean) {
         scope.launch {
             val intensity = graph.settingsRepo.reminderIntensity.first()
-            graph.reminderPlayer.play(intensity)
+            // v1.13.0:按系统铃声模式自动适配(静音=仅自动消失的通知;振动=仅振动;响铃=振动+铃声)
+            val mode = context.getSystemService(android.media.AudioManager::class.java)?.ringerMode
+                ?: android.media.AudioManager.RINGER_MODE_NORMAL
+            val channels = reminderChannelsFor(mode)
+            graph.reminderPlayer.play(intensity, channels)
+            // 振动/响铃模式不发通知(已有声/振反馈);静音模式才补一条会自动消失的通知
+            if (!channels.notify) return@launch
             if (Build.VERSION.SDK_INT >= 33 &&
                 context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
@@ -88,9 +94,15 @@ class ServiceNotifier(
             val nm = context.getSystemService(android.app.NotificationManager::class.java) ?: return@launch
             TimerNotifications.ensureChannels(context)
             runCatching {
-                nm.notify(TimerNotifications.ID_NOTIFY, TimerNotifications.phaseDone(context, workFinished))
+                nm.notify(
+                    TimerNotifications.ID_NOTIFY,
+                    TimerNotifications.phaseDone(context, workFinished, channels.notifyTimeoutMs),
+                )
             }
-            DiagLog.add("Remind", "阶段完成通知 工作结束=$workFinished")
+            DiagLog.add(
+                "Remind",
+                "阶段完成通知(自动消失) 模式=${ringerModeName(mode)} 工作结束=$workFinished",
+            )
         }
     }
 }

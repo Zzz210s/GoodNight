@@ -13,31 +13,37 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * v1.12.3:提醒改为**只振动、不响铃**。
- * 这里锁死行为:STANDARD/STRONG 必须振动,LIGHT 完全不振动(安静),
- * 且不再触发任何铃声播放(铃声代码已移除,若回归引入会体现在此处与实现审查)。
+ * v1.13.0:提醒动作由 [ReminderChannels] 决定(随系统静音/振动/响铃模式)。
+ * 这里锁死"静音不振动、振动/响铃要振动"这两条最容易被改坏的边界。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ReminderPlayerTest {
     private val ctx: Context = ApplicationProvider.getApplicationContext()
     private val vibrator: Vibrator get() = ctx.getSystemService(Vibrator::class.java)
+    private val player = ReminderPlayer(ctx)
 
     @Test
-    fun standardVibrates() {
-        ReminderPlayer(ctx).play(ReminderIntensity.STANDARD)
-        assertTrue("STANDARD 应振动", shadowOf(vibrator).isVibrating)
+    fun vibrateModeVibrates() {
+        player.play(ReminderIntensity.STANDARD, reminderChannelsFor(android.media.AudioManager.RINGER_MODE_VIBRATE))
+        assertTrue("振动模式应振动", shadowOf(vibrator).isVibrating)
     }
 
     @Test
-    fun strongVibrates() {
-        ReminderPlayer(ctx).play(ReminderIntensity.STRONG)
-        assertTrue("STRONG 应振动", shadowOf(vibrator).isVibrating)
+    fun ringModeVibrates() {
+        player.play(ReminderIntensity.STRONG, reminderChannelsFor(android.media.AudioManager.RINGER_MODE_NORMAL))
+        assertTrue("响铃模式应振动", shadowOf(vibrator).isVibrating)
     }
 
     @Test
-    fun lightStaysSilent() {
-        ReminderPlayer(ctx).play(ReminderIntensity.LIGHT)
-        assertFalse("LIGHT 应完全安静(不振动)", shadowOf(vibrator).isVibrating)
+    fun silentModeDoesNotVibrate() {
+        player.play(ReminderIntensity.STRONG, reminderChannelsFor(android.media.AudioManager.RINGER_MODE_SILENT))
+        assertFalse("静音模式不应振动(只发自动消失的通知)", shadowOf(vibrator).isVibrating)
+    }
+
+    @Test
+    fun lightIntensityStillVibratesInVibrateMode() {
+        player.play(ReminderIntensity.LIGHT, reminderChannelsFor(android.media.AudioManager.RINGER_MODE_VIBRATE))
+        assertTrue("振动模式下轻档也必须振动", shadowOf(vibrator).isVibrating)
     }
 }

@@ -82,10 +82,13 @@ internal fun AutoBackupSection(vm: SettingsViewModel) {
             modifier = Modifier.padding(top = 6.dp),
         )
     }
-    // 仅失败时显示:提示用户重新选择备份目录(非说明性文案)
+    // 仅失败时显示:提示用户重新选择备份目录(授权失效)或检查目录可写性(一般写入失败)
     if (error != null) {
         Text(
-            stringResource(R.string.backup_error_hint),
+            stringResource(
+                if (error == com.embertimer.data.BackupError.WRITE) R.string.backup_error_write
+                else R.string.backup_error_hint,
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(top = 6.dp),

@@ -7,6 +7,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [1.13.0] - 2026-09-20
+### Changed
+- **Phase alerts now follow the system sound mode** (instead of the in-app intensity alone):
+  - silent: a single notification that **auto-dismisses after 6 s** (no vibration, no sound);
+  - vibrate: vibration only (no notification);
+  - ring: vibration + system alarm sound (no notification; the ringtone stops itself).
+- **Reminder intensity** is now only the vibration pattern / ringtone length: light = one short buzz / 2 s,
+  standard = two buzzes / 3 s, strong = three long buzzes / 5 s. Light is no longer a no-op
+  (previously, choosing light in vibrate mode meant no alert at all).
+
+### Fixed
+- **The backup folder no longer goes stale after every reboot**: picking a folder now calls
+  `takePersistableUriPermission` right away (it was never called before, so the grant only lived as long as
+  the process — `dumpsys activity` showed no persisted grant for the app), and app start self-heals the grant.
+  Write failures now distinguish "permission lost" (prompt to re-pick the folder) from a generic write failure.
+
 ## [1.12.3] - 2026-09-20
 ### Changed
 - **Phase alerts are vibration-only** (no ringtone): the reminder no longer plays the system alarm/notification

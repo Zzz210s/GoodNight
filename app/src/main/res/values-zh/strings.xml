@@ -50,6 +50,7 @@
     <string name="intensity_light">轻</string>
     <string name="intensity_standard">标准</string>
     <string name="intensity_strong">强</string>
+    <string name="reminder_mode_hint">自动适配系统模式:静音 → 仅通知(自动消失),振动 → 仅振动,响铃 → 振动+铃声</string>
     <string name="exact_alarm_hint">精确闹钟未授权,后台切换可能有分钟级延迟</string>
     <string name="go_grant">去授权</string>
     <!-- 主页 -->
@@ -131,4 +132,5 @@
     <string name="appearance_section">外观</string>
     <string name="notif_start">启动</string>
     <string name="backup_error_hint">备份目录授权已失效(重装或被撤销),请重新选择备份目录</string>
+    <string name="backup_error_write">备份写入失败,请确认该目录可写</string>
 </resources>

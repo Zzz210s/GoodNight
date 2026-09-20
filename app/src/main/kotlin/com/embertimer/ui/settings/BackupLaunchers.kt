@@ -23,7 +23,7 @@ internal fun rememberBackupActions(vm: SettingsViewModel): Pair<() -> Unit, () -
     // 选择备份目录(tree Uri):选后立即写一次(即"立即验证目录可用"),并记住供自动备份复用
     val dirLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) scope.launch {
-            val ok = runCatching { vm.setBackupDir(uri.toString()) }.getOrDefault(false)
+            val ok = runCatching { vm.setBackupDir(ctx, uri.toString()) }.getOrDefault(false)
             Toast.makeText(
                 ctx,
                 ctx.getString(if (ok) R.string.backup_done else R.string.backup_failed),

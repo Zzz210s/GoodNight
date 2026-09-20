@@ -39,6 +39,8 @@ open class EmberApp : Application() {
             runCatching { TimerNotifications.ensureChannels(this@EmberApp) }
             // v1.1 #5:报表通知闹钟(周日/月末 23:00)——每次进程冷启/开机补武装(闹钟不跨重启)
             runCatching { com.embertimer.service.ReportAlarmScheduler(this@EmberApp).ensure() }
+            // v1.13.0:备份目录授权自愈 —— 修复"重启后备份目录失效"(选目录时未持久化授权)
+            runCatching { com.embertimer.data.BackupPermissions.healOnStartup(this@EmberApp, graph.settingsRepo) }
         }
         // v1.6 误触规则一次性清理:删除历史 <1 分钟段并扣回当日合计(SharedPreferences 标记只跑一次)
         val prefs = getSharedPreferences("ember_meta", MODE_PRIVATE)

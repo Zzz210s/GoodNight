@@ -49,6 +49,7 @@
     <string name="intensity_light">Light</string>
     <string name="intensity_standard">Standard</string>
     <string name="intensity_strong">Strong</string>
+    <string name="reminder_mode_hint">Adapts to the system mode: silent = notification only (auto-dismisses), vibrate = vibration only, ring = vibration + ringtone</string>
     <string name="exact_alarm_hint">Exact alarm permission is off — background switches may be delayed by minutes</string>
     <string name="go_grant">Grant</string>
     <!-- home -->
@@ -131,4 +132,5 @@
     <string name="appearance_section">Appearance</string>
     <string name="notif_start">Start</string>
     <string name="backup_error_hint">Backup target lost (app reinstalled or permission revoked) — pick the backup folder again</string>
+    <string name="backup_error_write">Backup write failed — make sure the folder is writable</string>
 </resources>

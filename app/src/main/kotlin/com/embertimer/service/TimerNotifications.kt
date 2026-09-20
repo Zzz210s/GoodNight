@@ -131,10 +131,14 @@ object TimerNotifications {
             .build()
     }
 
-    fun phaseDone(context: Context, workFinished: Boolean): Notification {
+    /**
+     * 阶段完成通知。v1.13.0:静音模式专用(振动/响铃模式不再发通知),
+     * [autoCancelMs] > 0 时到点自动消失,不留在通知栏。
+     */
+    fun phaseDone(context: Context, workFinished: Boolean, autoCancelMs: Long = 0L): Notification {
         val title = context.getString(if (workFinished) R.string.done_work_title else R.string.done_rest_title)
         val text = context.getString(if (workFinished) R.string.done_rest_body else R.string.done_work_body)
-        return NotificationCompat.Builder(context, CH_TIMER)
+        val builder = NotificationCompat.Builder(context, CH_TIMER)
             .setSmallIcon(R.drawable.ic_notif_flame)
             .setContentTitle(title)
             .setContentText(text)
@@ -143,7 +147,8 @@ object TimerNotifications {
             .setContentIntent(activityIntent(context))
             // v1.10.11:右侧对号按钮 = 确认收到,清除本条通知(不打开应用,不干扰后续通知)
             .addAction(R.drawable.ic_check, " ", TimerNotifIdle.ackPendingIntent(context))
-            .build()
+        if (autoCancelMs > 0) builder.setTimeoutAfter(autoCancelMs)
+        return builder.build()
     }
 
     private fun activityIntent(context: Context): PendingIntent = PendingIntent.getActivity(
