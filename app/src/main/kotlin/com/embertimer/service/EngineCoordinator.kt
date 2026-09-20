@@ -43,6 +43,9 @@ class EngineCoordinator(private val graph: AppGraph) {
     /** 引擎驱动串行化(命令/事件/到期推进/ticker 共用) */
     val mutex = Mutex()
 
+    /** v1.14.0 疲劳提醒:锁内判定、锁外投递 */
+    private val fatigue = FatigueTracker(graph)
+
     private val eventsSubscribed = CompletableDeferred<Unit>()
 
     /** STOP 的 Reset 事件排空信号(拆除握手用) */
@@ -143,6 +146,15 @@ class EngineCoordinator(private val graph: AppGraph) {
     suspend fun flushCheckpoint(force: Boolean) = mutex.withLock {
         ledger.flush(graph.engine.snapshot.value, graph.time.elapsedRealtime(), force)
     }
+
+    /**
+     * 疲劳提醒判定(调用方持锁:只做 DB 读 + 策略,不做 binder 调用)。
+     * @return 需要提醒时的连续工作时长(ms)
+     */
+    suspend fun fatigueDueMs(): Long? = fatigue.dueMs()
+
+    /** 疲劳提醒投递(锁外:通知/振动是 binder 调用,不占引擎锁) */
+    fun deliverFatigue(continuousMs: Long) = notifier.fatigueReminder(continuousMs)
 
     /** 空闲/停止收尾:交给服务(脱离前台 + 空闲常驻通知 + stopSelf) */
     fun teardown() {

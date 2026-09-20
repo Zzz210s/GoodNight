@@ -41,6 +41,8 @@ data class SettingsUiState(
     val backupLastAt: Long = 0L,
     /** v1.11.0:上次自动/手动备份失败原因(null = 正常) */
     val backupError: String? = null,
+    /** v1.14.0:疲劳提醒开关(同一任务连续工作 90 分钟提醒长休息) */
+    val fatigueReminder: Boolean = true,
 )
 
 class SettingsViewModel(val graph: AppGraph) : ViewModel() {
@@ -66,13 +68,18 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
         ) { pack, auto, uri, last, err ->
             BackupState(pack, auto, uri, last, err)
         },
-    ) { s, b ->
+        graph.settingsRepo.fatigueReminder,
+    ) { s, b, fatigue ->
         s.copy(
             themePack = b.pack, autoBackup = b.auto, backupUri = b.uri,
-            backupLastAt = b.last, backupError = b.err,
+            backupLastAt = b.last, backupError = b.err, fatigueReminder = fatigue,
         )
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
+
+    fun setFatigueReminder(on: Boolean) {
+        viewModelScope.launch { graph.settingsRepo.setFatigueReminder(on) }
+    }
 
     // v1.9.12 #37:开关只持久化 —— 备份时机改为工作段结束事件触发(EventApplier 调 scheduleNow),
     // 不再每日周期注册;选目录后立即做一次备份(立即验证目录可用)。

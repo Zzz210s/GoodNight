@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -28,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import com.embertimer.diag.DiagnosticsSection
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -155,6 +157,32 @@ fun SettingsScreen(
                         // v1.13.0:提醒随系统静音/振动/响铃模式自动适配,强度只管振动节奏与铃声时长
                         Text(
                             stringResource(R.string.reminder_mode_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+            }
+
+            // 疲劳提醒(v1.14.0):同一任务连续工作 90 分钟(忽略中间短休息)提醒长休息
+            item {
+                SectionHeader(stringResource(R.string.fatigue_title))
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                stringResource(R.string.fatigue_switch),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = ui.fatigueReminder,
+                                onCheckedChange = { vm.setFatigueReminder(it) },
+                            )
+                        }
+                        Text(
+                            stringResource(R.string.fatigue_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp),

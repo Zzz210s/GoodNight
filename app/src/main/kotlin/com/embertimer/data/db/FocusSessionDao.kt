@@ -21,6 +21,10 @@ interface FocusSessionDao {
     )
     suspend fun between(dayStartMs: Long, dayEndMs: Long): List<FocusSessionEntity>
 
+    /** 某任务最近的工作段(起点倒序取 [limit] 条);疲劳提醒据此算"连续工作"累计 */
+    @Query("SELECT * FROM focus_session WHERE profileId = :profileId ORDER BY startAt DESC LIMIT :limit")
+    suspend fun recentForProfile(profileId: Long, limit: Int): List<FocusSessionEntity>
+
     @Query("SELECT COUNT(*) FROM focus_session")
     suspend fun count(): Int
 

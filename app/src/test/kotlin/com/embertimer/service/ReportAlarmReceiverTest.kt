@@ -108,7 +108,7 @@ class ReportAlarmReceiverTest {
         val txt = n.extras?.getString(android.app.Notification.EXTRA_TEXT)
         assertNotNull(txt)
         // Robolectric 默认 en-US:断言走 values-en(英文对照)
-        assertTrue(txt!!.startsWith("本周专注 "))
+        assertTrue(txt!!.startsWith("本周累计 "))
         assertTrue(txt.contains("分钟"))
     }
 
@@ -121,7 +121,7 @@ class ReportAlarmReceiverTest {
         ReportAlarmReceiver().onReceive(ctx, Intent(ReportAlarmActions.MONTH))
         awaitCond { posted().isNotEmpty() }
         val txt = posted().first().extras?.getString(android.app.Notification.EXTRA_TEXT)
-        assertTrue(txt!!.startsWith("本月专注 "))
+        assertTrue(txt!!.startsWith("本月累计 "))
     }
 
     @Test fun noRecordNoNotification() {

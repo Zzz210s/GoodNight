@@ -19,7 +19,7 @@ class EnResourcesTest {
         assertEquals("Reports", ctx.getString(R.string.report_title))
         assertEquals("Weekly", ctx.getString(R.string.tab_week))
         assertEquals("All-time totals", ctx.getString(R.string.total_lifetime))
-        assertEquals("Focus this week: 30m", ctx.getString(R.string.report_week_body, "30m"))
+        assertEquals("This week: 30m", ctx.getString(R.string.report_week_body, "30m"))
         assertEquals("1h 30m", ctx.getString(R.string.duration_hm, 1, 30))
     }
 }

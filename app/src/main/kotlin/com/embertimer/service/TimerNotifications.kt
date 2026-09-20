@@ -29,6 +29,12 @@ object TimerNotifications {
     const val CH_TIMER = "ember_timer"
     const val ID_NOTIFY = 1
 
+    /** v1.14.0 疲劳提醒:独立 ID,不覆盖计时通知 */
+    const val ID_FATIGUE = 2
+
+    /** 疲劳提醒通知停留时长:够看完文案,又不长期占位 */
+    private const val FATIGUE_TIMEOUT_MS = 30_000L
+
     /** 通知"对号"确认按钮的 PendingIntent requestCode(v1.10.11) */
     private const val ACK_REQ = 0x9A
 
@@ -129,6 +135,25 @@ object TimerNotifications {
             .setCustomContentView(rv)
             .setCustomBigContentView(rv)
             .build()
+    }
+
+    /**
+     * 疲劳提醒通知(v1.14.0):独立 ID + 30 秒后自动消失。
+     * 依据超日节律:同一任务连续工作 90 分钟后建议 15-20 分钟长休息。
+     */
+    fun fatigue(context: Context, continuousMs: Long, autoCancelMs: Long = FATIGUE_TIMEOUT_MS): Notification {
+        val dur = com.embertimer.timer.DurationFormat.localizedHm(context, continuousMs)
+        val body = context.getString(R.string.fatigue_body, dur)
+        val builder = NotificationCompat.Builder(context, CH_TIMER)
+            .setSmallIcon(R.drawable.ic_notif_flame)
+            .setContentTitle(context.getString(R.string.fatigue_title))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(activityIntent(context))
+        if (autoCancelMs > 0) builder.setTimeoutAfter(autoCancelMs)
+        return builder.build()
     }
 
     /**

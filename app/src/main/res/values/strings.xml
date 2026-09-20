@@ -8,14 +8,14 @@
     <string name="total_window">Clock totals</string>
     <string name="total_lifetime">All-time totals</string>
     <string name="total_all">Grand total</string>
-    <string name="empty_period">No focus this period</string>
-    <string name="empty_lifetime">No focus records yet</string>
+    <string name="empty_period">Nothing logged this period</string>
+    <string name="empty_lifetime">Nothing logged yet</string>
     <string name="report_back">Back</string>
     <string name="report_week_title">Weekly report</string>
     <string name="report_month_title">Monthly report</string>
-    <string name="report_week_body">Focus this week: %1$s</string>
-    <string name="report_month_body">Focus this month: %1$s</string>
-    <string name="ch_report">Focus reports</string>
+    <string name="report_week_body">This week: %1$s</string>
+    <string name="report_month_body">This month: %1$s</string>
+    <string name="ch_report">Time reports</string>
     <string name="duration_hm">%1$dh %2$dm</string>
     <string name="duration_m">%1$dm</string>
     <!-- common -->
@@ -51,6 +51,10 @@
     <string name="intensity_strong">Strong</string>
     <string name="reminder_mode_hint">Adapts to the system mode: silent = notification only (auto-dismisses), vibrate = vibration only, ring = vibration + ringtone</string>
     <string name="exact_alarm_hint">Exact alarm permission is off — background switches may be delayed by minutes</string>
+    <string name="fatigue_title">Fatigue reminder</string>
+    <string name="fatigue_switch">Enable fatigue reminder</string>
+    <string name="fatigue_hint">After 90 minutes of continuous work on the same task (short breaks in between ignored) it suggests a 15-20 minute break — based on the ultradian rhythm: attention runs in cycles of roughly 90 minutes, and a cycle needs real rest to recover</string>
+    <string name="fatigue_body">You have worked %1$s straight — take a 15-20 minute break before continuing</string>
     <string name="go_grant">Grant</string>
     <!-- home -->
     <string name="state_idle">Idle</string>
@@ -60,8 +64,8 @@
     <string name="go_new_clock">New clock</string>
     <string name="cycle_n">Cycle %1$d</string>
     <string name="today_total">Today: %1$s</string>
-    <string name="focus_total">Focus %1$s</string>
-    <string name="day_none">No focus that day</string>
+    <string name="focus_total">Total %1$s</string>
+    <string name="day_none">Nothing logged that day</string>
     <string name="day_no_records">%1$s, no focus</string>
     <string name="unselected_placeholder">Not selected</string>
     <!-- notifications -->
@@ -82,7 +86,7 @@
     <string name="no_records_short">no focus</string>
     <string name="act_start">Start</string>
     <string name="ch_app">EmberTimer</string>
-    <string name="m_focus_days">Focus days</string>
+    <string name="m_focus_days">Active days</string>
     <string name="m_streak">Streak</string>
     <string name="m_avg">Avg / day</string>
     <string name="m_best">Best day</string>

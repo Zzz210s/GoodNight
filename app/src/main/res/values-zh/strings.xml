@@ -8,14 +8,14 @@
     <string name="total_window">各时钟合计</string>
     <string name="total_lifetime">各时钟累计(起用至今)</string>
     <string name="total_all">全部合计</string>
-    <string name="empty_period">本期无专注记录</string>
-    <string name="empty_lifetime">还没有专注记录</string>
+    <string name="empty_period">本期无累计记录</string>
+    <string name="empty_lifetime">还没有累计记录</string>
     <string name="report_back">返回</string>
     <string name="report_week_title">周报</string>
     <string name="report_month_title">月报</string>
-    <string name="report_week_body">本周专注 %1$s</string>
-    <string name="report_month_body">本月专注 %1$s</string>
-    <string name="ch_report">专注报表</string>
+    <string name="report_week_body">本周累计 %1$s</string>
+    <string name="report_month_body">本月累计 %1$s</string>
+    <string name="ch_report">累计报表</string>
     <string name="duration_hm">%1$d 小时 %2$d 分钟</string>
     <string name="duration_m">%1$d 分钟</string>
 
@@ -52,6 +52,10 @@
     <string name="intensity_strong">强</string>
     <string name="reminder_mode_hint">自动适配系统模式:静音 → 仅通知(自动消失),振动 → 仅振动,响铃 → 振动+铃声</string>
     <string name="exact_alarm_hint">精确闹钟未授权,后台切换可能有分钟级延迟</string>
+    <string name="fatigue_title">疲劳提醒</string>
+    <string name="fatigue_switch">开启疲劳提醒</string>
+    <string name="fatigue_hint">同一任务连续工作 90 分钟(忽略中间短休息)后提醒你长休息 15-20 分钟 —— 依据超日节律:注意力以约 90 分钟为一个周期,一个周期后需要真正休息才能恢复</string>
+    <string name="fatigue_body">已连续工作 %1$s,建议休息 15-20 分钟再继续</string>
     <string name="go_grant">去授权</string>
     <!-- 主页 -->
     <string name="state_idle">空闲</string>
@@ -61,8 +65,8 @@
     <string name="go_new_clock">去新建时钟</string>
     <string name="cycle_n">循环 %1$d</string>
     <string name="today_total">今日 %1$s</string>
-    <string name="focus_total">专注 %1$s</string>
-    <string name="day_none">当日无专注记录</string>
+    <string name="focus_total">累计 %1$s</string>
+    <string name="day_none">当日无累计记录</string>
     <string name="day_no_records">%1$s, 无记录</string>
     <string name="unselected_placeholder">未选择</string>
     <!-- 通知 -->
@@ -82,7 +86,7 @@
     <string name="report_bucket_week">第 %1$d 周(%2$s~%3$s)</string>
     <string name="act_start">开始</string>
     <string name="ch_app">EmberTimer</string>
-    <string name="m_focus_days">专注天数</string>
+    <string name="m_focus_days">累计天数</string>
     <string name="m_streak">连续</string>
     <string name="m_avg">日均</string>
     <string name="m_best">最佳单日</string>

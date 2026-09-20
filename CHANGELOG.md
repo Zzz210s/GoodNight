@@ -7,6 +7,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [1.14.0] - 2026-09-20
+### Changed
+- The Chinese UI wording "专注" (focus) is now "累计" (total) throughout (reports, day detail,
+  notification channel names); the English copy was aligned to match.
+
+### Added
+- **Fatigue reminder**: after **90 minutes** of continuous work on the same task (short breaks in between
+  ignored) it suggests a 15-20 minute break. Based on the ultradian rhythm (BRAC, Kleitman: attention runs
+  in ~90-minute cycles) and vigilance-decrement research (alertness drops after 60-90 minutes of sustained
+  work). Semantics: work segments of the same profile are summed, gaps of ≤30 minutes count as short breaks
+  and are ignored, gaps of >30 minutes count as real rest and reset the streak; while the streak continues
+  it reminds at most every 30 minutes. Toggle in Settings (on by default).
+  Delivery: a dedicated notification that auto-dismisses after 30 seconds plus vibration following the
+  system sound mode (no vibration in silent mode, never rings).
+
 ## [1.13.0] - 2026-09-20
 ### Changed
 - **Phase alerts now follow the system sound mode** (instead of the in-app intensity alone):

@@ -73,6 +73,37 @@ class ServiceNotifier(
     }
 
     /**
+     * 疲劳提醒投递(v1.14.0):**始终发通知**(信息量在文案:连续多久 + 建议休息多久),
+     * 振动按系统模式(静音不振动);不响铃 —— 健康提醒不该用铃声打断工作。
+     */
+    fun fatigueReminder(continuousMs: Long) {
+        scope.launch {
+            val intensity = graph.settingsRepo.reminderIntensity.first()
+            val mode = context.getSystemService(android.media.AudioManager::class.java)?.ringerMode
+                ?: android.media.AudioManager.RINGER_MODE_NORMAL
+            if (mode != android.media.AudioManager.RINGER_MODE_SILENT) {
+                graph.reminderPlayer.play(
+                    intensity,
+                    ReminderChannels(notify = false, vibrate = true, sound = false, notifyTimeoutMs = 0L),
+                )
+            }
+            if (Build.VERSION.SDK_INT >= 33 &&
+                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) return@launch
+            val nm = context.getSystemService(android.app.NotificationManager::class.java) ?: return@launch
+            TimerNotifications.ensureChannels(context)
+            runCatching {
+                nm.notify(TimerNotifications.ID_FATIGUE, TimerNotifications.fatigue(context, continuousMs))
+            }
+            DiagLog.add(
+                "Fatigue",
+                "疲劳提醒已发出 连续=${continuousMs / 60_000}分钟 模式=${ringerModeName(mode)}",
+            )
+        }
+    }
+
+    /**
      * 播放提醒并发 heads-up 通知,数秒自停,无需交互。
      * 通知与播放均在锁外协程内执行:ensureChannels/notify 是同步 binder 调用,
      * 在引擎锁临界区内直接调用会拖长持锁时间。

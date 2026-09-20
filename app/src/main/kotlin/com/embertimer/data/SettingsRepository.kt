@@ -21,6 +21,8 @@ class SettingsRepository(private val ds: DataStore<Preferences>) {
     private val keyBackupError = stringPreferencesKey("backup_error")
     private val keyBackupLast = longPreferencesKey("backup_last")
     private val keyFirstLaunch = stringPreferencesKey("first_launch_date")
+    // v1.14.0 疲劳提醒
+    private val keyFatigue = booleanPreferencesKey("fatigue_reminder")
 
     val activeProfileId: Flow<Long> = ds.data.map { it[keyActive] ?: -1L }
 
@@ -60,4 +62,9 @@ class SettingsRepository(private val ds: DataStore<Preferences>) {
     /** 首次打开应用日期(yyyy-MM-dd);报表往期回顾的起点。未设置时返回 null。 */
     val firstLaunchDate: Flow<String?> = ds.data.map { it[keyFirstLaunch] }
     suspend fun setFirstLaunchDate(d: String) { ds.edit { it[keyFirstLaunch] = d } }
+
+    // ---- v1.14.0 疲劳提醒(同一任务连续工作 90 分钟提醒长休息;默认开) ----
+    val fatigueReminder: Flow<Boolean> = ds.data.map { it[keyFatigue] ?: true }
+
+    suspend fun setFatigueReminder(v: Boolean) { ds.edit { it[keyFatigue] = v } }
 }

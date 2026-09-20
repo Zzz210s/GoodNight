@@ -25,7 +25,8 @@ internal class TickDriver(
     fun loop(scope: CoroutineScope) = scope.launch {
         while (isActive) {
             try {
-                mutex.withLock {
+                // v1.14.0:疲劳提醒在锁内只做判定(DB 读),投递放到锁外(避免 binder 调用拉长持锁)
+                val fatigue = mutex.withLock {
                     val snap = graph.engine.snapshot.value
                     val now = graph.time.elapsedRealtime()
                     if (snap != null && snap.status == EngineStatus.RUNNING &&
@@ -40,7 +41,9 @@ internal class TickDriver(
                         graph.engine.onExpired()
                     }
                     ledger.flush(graph.engine.snapshot.value, graph.time.elapsedRealtime(), force = false)
+                    graph.coordinator.fatigueDueMs()
                 }
+                if (fatigue != null) graph.coordinator.deliverFatigue(fatigue)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
