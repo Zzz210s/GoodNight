@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- EmberTimer default resources = ENGLISH (zh override under values-zh). System-locale driven. -->
+    <!-- GoodNight default resources = ENGLISH (zh override under values-zh). System-locale driven. -->
     <string name="report_title">Reports</string>
     <string name="tab_week">Weekly</string>
     <string name="tab_month">Monthly</string>
@@ -85,7 +85,7 @@
     <string name="report_bucket_week">Week %1$d (%2$s~%3$s)</string>
     <string name="no_records_short">no focus</string>
     <string name="act_start">Start</string>
-    <string name="ch_app">EmberTimer</string>
+    <string name="ch_app">GoodNight</string>
     <string name="m_focus_days">Active days</string>
     <string name="m_streak">Streak</string>
     <string name="m_avg">Avg / day</string>
@@ -111,7 +111,7 @@
     <string name="pack_rose">Rose</string>
     <string name="pack_teal">Teal</string>
     <string name="pack_nord">Nord</string>
-    <string name="app_name">EmberTimer</string>
+    <string name="app_name">GoodNight</string>
     <string name="report_prev">Previous</string>
     <string name="report_next">Next</string>
     <string name="report_period">%1$s</string>

@@ -1,8 +1,10 @@
-# EmberTimer
+# GoodNight
 
 **English | [简体中文](./README.zh-CN.md)**
 
 An Android work/rest cycle timer with a GitHub-style daily focus heatmap. Reliable in the background: exact alarms, kill/reboot self-recovery, cross-midnight bookkeeping.
+
+> Named after Dylan Thomas's line *"Do not go gentle into that good night"* — 良夜 (liáng yè) means "good night".
 
 ## Contents
 
@@ -17,7 +19,7 @@ An Android work/rest cycle timer with a GitHub-style daily focus heatmap. Reliab
 
 ## Background
 
-The core problem of pomodoro-style apps is background reliability: lock screen, force-kill, reboot, and midnight crossings must not lose accounting. EmberTimer solves this with a foreground service + exact alarms + a dual-clock engine (monotonic clock for timing, wall clock for reconciliation), and visualizes long-term focus history as a daily heatmap.
+The core problem of pomodoro-style apps is background reliability: lock screen, force-kill, reboot, and midnight crossings must not lose accounting. GoodNight solves this with a foreground service + exact alarms + a dual-clock engine (monotonic clock for timing, wall clock for reconciliation), and visualizes long-term focus history as a daily heatmap.
 
 ## Features
 
@@ -47,12 +49,12 @@ The core problem of pomodoro-style apps is background reliability: lock screen, 
 
 Requires Android 8.0 (API 26) or newer.
 
-- Download the APK from [Releases](https://github.com/Zzz210s/EmberTimer/releases) (v0.3.0+ is release-signed and installs directly; note that upgrading over a debug-signed v0.2.0 install requires uninstalling first).
+- Download the APK from [Releases](https://github.com/Zzz210s/GoodNight/releases) (v0.3.0+ is release-signed and installs directly; note that upgrading over a debug-signed v0.2.0 install requires uninstalling first).
 - Or build from source:
 
 ```bash
-git clone https://github.com/Zzz210s/EmberTimer.git
-cd EmberTimer
+git clone https://github.com/Zzz210s/GoodNight.git
+cd GoodNight
 ./gradlew :app:assembleDebug
 # output: app/build/outputs/apk/debug/app-debug.apk
 ```

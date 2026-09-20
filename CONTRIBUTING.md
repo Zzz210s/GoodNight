@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving EmberTimer. / 感谢关注 EmberTimer。
+Thanks for your interest in improving GoodNight. / 感谢关注良夜(GoodNight)。
 
 This is a Jetpack Compose Android app (Kotlin, Room, M3). See [README.md](README.md) for setup and [Architecture](#architecture) below.
 

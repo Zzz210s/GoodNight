@@ -7,6 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [1.15.0] - 2026-09-20
+### Changed
+- Project renamed to **GoodNight** (良夜) — from Dylan Thomas's "Do not go gentle into that good night".
+  The app display name (Chinese 良夜 / English GoodNight), notification channel group name, theme name,
+  README and architecture diagram, repository name, release asset name (`GoodNight-<version>.apk`) and the
+  signing keystore file name were updated together.
+  The Android package name (com.embertimer), database file name, backup file name and notification channel id
+  are unchanged — existing installs upgrade in place with their data and backup-folder grant intact.
+
 ## [1.14.0] - 2026-09-20
 ### Changed
 - The Chinese UI wording "专注" (focus) is now "累计" (total) throughout (reports, day detail,

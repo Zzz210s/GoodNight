@@ -19,7 +19,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.EmberTimer">
+        android:theme="@style/Theme.GoodNight">
 
         <activity
             android:name=".MainActivity"

@@ -49,19 +49,19 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > embertimer-release.keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > goodnight-release.keystore
           printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
-            "embertimer-release.keystore" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > local.properties
+            "goodnight-release.keystore" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > local.properties
       - name: Build release APK
         run: ./gradlew assembleRelease
-      # 资产命名统一为 EmberTimer-<版本>.apk(与 scripts/release.sh 一致)
+      # 资产命名统一为 GoodNight-<版本>.apk(与 scripts/release.sh 一致)
       - name: Rename APK asset
-        run: cp app/build/outputs/apk/release/app-release.apk "EmberTimer-${GITHUB_REF_NAME#v}.apk"
+        run: cp app/build/outputs/apk/release/app-release.apk "GoodNight-${GITHUB_REF_NAME#v}.apk"
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          files: EmberTimer-*.apk
+          files: GoodNight-*.apk
           generate_release_notes: true
           draft: false
         env:

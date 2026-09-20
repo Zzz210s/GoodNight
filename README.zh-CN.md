@@ -1,8 +1,10 @@
-# EmberTimer
+# 良夜(GoodNight)
 
 **[English](./README.md) | 简体中文**
 
 安卓工作/休息循环计时器,带 GitHub 风格的每日专注热力图。后台可靠运行:精确闹钟、强杀/重启自愈、跨午夜落账。
+
+> 名字取自狄兰·托马斯的诗句「不要温和地走进那个良夜」(Do not go gentle into that good night)。
 
 ## 目录
 
@@ -17,7 +19,7 @@
 
 ## 背景
 
-番茄工作法类应用的核心矛盾是"后台可靠性":锁屏、强杀、重启、跨午夜都要不丢账。EmberTimer 用前台服务 + 精确闹钟 + 双时钟(单调钟计时/墙钟对账)引擎解决这一问题,并以每日热力图呈现长期专注历史。
+番茄工作法类应用的核心矛盾是"后台可靠性":锁屏、强杀、重启、跨午夜都要不丢账。良夜用前台服务 + 精确闹钟 + 双时钟(单调钟计时/墙钟对账)引擎解决这一问题,并以每日热力图呈现长期专注历史。
 
 ## 功能
 
@@ -47,12 +49,12 @@
 
 要求:Android 8.0(API 26)及以上。
 
-- 从 [Releases](https://github.com/Zzz210s/EmberTimer/releases) 下载 APK 安装(v0.3.0 起为正式签名版可直接安装;注意从 v0.2.0 调试签名版升级需先卸载)
+- 从 [Releases](https://github.com/Zzz210s/GoodNight/releases) 下载 APK 安装(v0.3.0 起为正式签名版可直接安装;注意从 v0.2.0 调试签名版升级需先卸载)
 - 或从源码构建:
 
 ```bash
-git clone https://github.com/Zzz210s/EmberTimer.git
-cd EmberTimer
+git clone https://github.com/Zzz210s/GoodNight.git
+cd GoodNight
 ./gradlew :app:assembleDebug
 # 产物: app/build/outputs/apk/debug/app-debug.apk
 ```

@@ -85,7 +85,7 @@
     <string name="done_rest_body">休息一下</string>
     <string name="report_bucket_week">第 %1$d 周(%2$s~%3$s)</string>
     <string name="act_start">开始</string>
-    <string name="ch_app">EmberTimer</string>
+    <string name="ch_app">良夜</string>
     <string name="m_focus_days">累计天数</string>
     <string name="m_streak">连续</string>
     <string name="m_avg">日均</string>
@@ -111,7 +111,7 @@
     <string name="pack_rose">玫红</string>
     <string name="pack_teal">青</string>
     <string name="pack_nord">暮色</string>
-    <string name="app_name">余烬计时</string>
+    <string name="app_name">良夜</string>
     <string name="report_prev">上一期</string>
     <string name="report_next">下一期</string>
     <string name="report_period">%1$s</string>
