@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ### Changed
 - The Chinese UI wording "专注" (focus) is now "累计" (total) throughout (reports, day detail,
   notification channel names); the English copy was aligned to match.
+- **Heatmap ramp is now five steps instead of four**: <30 min / <1 h / <2 h / <4 h / ≥4 h with
+  opacity stepping 0.28 → 1.0 (a 1-hour bucket was inserted between 30 minutes and 2 hours so the most
+  common 40-minute to 2-hour range reads more clearly).
 
 ### Added
 - **Fatigue reminder**: after **90 minutes** of continuous work on the same task (short breaks in between

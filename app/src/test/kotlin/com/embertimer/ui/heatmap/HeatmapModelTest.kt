@@ -29,7 +29,7 @@ class HeatmapModelTest {
         val cells = m.columns[0].cells
         assertEquals(3, cells.size)
         assertEquals(monday, cells[0].date)
-        assertEquals(HeatLevel.L2, cells[0].level)
+        assertEquals(HeatLevel.L3, cells[0].level)
         assertEquals(HeatLevel.NONE, cells[1].level)
         assertEquals(0L, cells[1].millis)
         assertEquals(HeatLevel.NONE, cells[2].level)
@@ -43,19 +43,21 @@ class HeatmapModelTest {
         assertTrue(cells.any { it.date == LocalDate.of(2026, 8, 28) })
     }
 
-    @Test fun levelsThresholdsUnchanged() {
+    @Test fun levelsThresholdsFiveSteps() {
+        // v1.14.0 五色渐进:<30m / <1h / <2h / <4h / >=4h
         assertEquals(HeatLevel.NONE, HeatmapLevels.of(0))
         assertEquals(HeatLevel.L1, HeatmapLevels.of(29 * 60_000L))
         assertEquals(HeatLevel.L2, HeatmapLevels.of(30 * 60_000L))
-        assertEquals(HeatLevel.L3, HeatmapLevels.of(2 * 3_600_000L))
-        assertEquals(HeatLevel.L4, HeatmapLevels.of(4 * 3_600_000L))
+        assertEquals(HeatLevel.L3, HeatmapLevels.of(3_600_000L))
+        assertEquals(HeatLevel.L4, HeatmapLevels.of(2 * 3_600_000L))
+        assertEquals(HeatLevel.L5, HeatmapLevels.of(4 * 3_600_000L))
     }
 
     @Test fun dayCellHasNoJoinFlags() {
         val d = LocalDate.of(2026, 9, 1)
         val m = buildHeatmapModel(mapOf(d to 3_600_000L), today)
         val c = m.columns.flatMap { it.cells }.first { it.date == d }
-        assertEquals(HeatLevel.L2, c.level)
+        assertEquals(HeatLevel.L3, c.level)
         // join 字段已随直角渲染移除(编译期保证:DayCell 仅 date/millis/level)
         assertEquals(d, c.date)
         assertEquals(3_600_000L, c.millis)

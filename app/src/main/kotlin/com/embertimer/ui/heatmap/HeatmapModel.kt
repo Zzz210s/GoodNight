@@ -18,15 +18,21 @@ data class HeatmapModel(
     val weekLabels: List<String> = listOf("", "1", "", "3", "", "5", ""), // 周标为数字:行=周日→周六,标 周一=1/周三=3/周五=5
 )
 
-enum class HeatLevel { NONE, L1, L2, L3, L4 }
+enum class HeatLevel { NONE, L1, L2, L3, L4, L5 }
 
 object HeatmapLevels {
+    /**
+     * v1.14.0:四色改**五色渐进** —— 在 30 分钟与 2 小时之间插入 1 小时档,
+     * 让最常见的 40 分钟~2 小时区间分得更细(实测数据多落在此区间)。
+     * 分档:<30 分钟 / <1 小时 / <2 小时 / <4 小时 / >=4 小时。
+     */
     fun of(millis: Long): HeatLevel = when {
         millis <= 0 -> HeatLevel.NONE
         millis < 30 * 60_000L -> HeatLevel.L1
-        millis < 2 * 3_600_000L -> HeatLevel.L2
-        millis < 4 * 3_600_000L -> HeatLevel.L3
-        else -> HeatLevel.L4
+        millis < 3_600_000L -> HeatLevel.L2
+        millis < 2 * 3_600_000L -> HeatLevel.L3
+        millis < 4 * 3_600_000L -> HeatLevel.L4
+        else -> HeatLevel.L5
     }
 }
 

@@ -43,7 +43,7 @@ private val CELL = 20.dp
 private val GAP = 2.dp
 /** v1.1 #2:统一 2dp 圆角,background 与 border 同 shape */
 private val CELL_RADIUS = RoundedCornerShape(2.dp)
-private val LEVEL_ALPHA = listOf(0.35f, 0.55f, 0.75f, 1f)
+private val LEVEL_ALPHA = listOf(0.28f, 0.46f, 0.64f, 0.82f, 1f)
 
 @Composable
 fun levelColor(level: HeatLevel): Color {
@@ -54,6 +54,7 @@ fun levelColor(level: HeatLevel): Color {
         HeatLevel.L2 -> primary.copy(alpha = LEVEL_ALPHA[1])
         HeatLevel.L3 -> primary.copy(alpha = LEVEL_ALPHA[2])
         HeatLevel.L4 -> primary.copy(alpha = LEVEL_ALPHA[3])
+        HeatLevel.L5 -> primary.copy(alpha = LEVEL_ALPHA[4])
     }
 }
 
