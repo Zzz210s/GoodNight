@@ -7,6 +7,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [1.12.3] - 2026-09-20
+### Changed
+- **Phase alerts are vibration-only** (no ringtone): the reminder no longer plays the system alarm/notification
+  sound, so the timer never blares in a library, classroom or meeting. Intensity still selects the vibration
+  pattern (LIGHT = fully silent, STANDARD = two short buzzes, STRONG = three long buzzes).
+
+### Added (debug builds only)
+- **Diagnostic log is now persisted**: every entry goes to logcat (`EmberDiag`) *and* to
+  `Android/data/com.embertimer/files/diag.log` (512 KiB cap, rolls to `diag.log.1`), so an incident that
+  happens while the screen is off survives; pull it with `adb pull`.
+- **Negative-countdown evidence logging**: phase advances record how late they were
+  (`到期推进 迟到=<ms>`, `ticker 到期推进 迟到=<ms>`) together with Doze/screen state
+  (`idle=... screen=...`), and alarm arming/cancelling is logged with exactness and target time.
+
+### Fixed
+- **Expiry wake-up is no longer deferred by OEM freezing**: the primary alarm now uses `setAlarmClock`
+  (a system "user-visible alarm", exempt from Huawei/Honor background freezing and power policies).
+  Measured on a real device (Honor REA-AN00 / Android 15): the previous `setExactAndAllowWhileIdle`
+  primary alarm was delivered **43.7 s late** after the screen went off (system logs show the CPU awake
+  while only this app was frozen), so the phase advance lagged — and during those 43 s the system
+  Chronometer in the notification kept showing negative numbers. Trade-off: an alarm icon appears in
+  the status bar while a timer runs. The safety-net alarm stays an elapsed-realtime exact alarm.
+- **Notification countdown can no longer show negative numbers while the process is alive**: the notifier
+  re-posts the notification 250 ms after the phase deadline, so a late ticker/alarm lands on the
+  "expired → static 00:00" branch instead of leaving the system Chronometer counting below zero.
+
 ## [1.12.2] - 2026-09-16
 ### Added (debug builds only)
 - **In-app diagnostics panel**: a "Diagnostics (debug)" card in Settings showing

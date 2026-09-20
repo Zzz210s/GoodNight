@@ -79,6 +79,8 @@ fun DiagnosticsSection(serviceAliveFlag: () -> Boolean) {
             }
             Text("通知栏: $notifState", style = MaterialTheme.typography.bodySmall)
             Text("运行态: $proc", style = MaterialTheme.typography.bodySmall)
+            Text("环境: ${DiagLog.env()}", style = MaterialTheme.typography.bodySmall)
+            Text("日志文件: ${DiagLog.filePath() ?: "未启用"}", style = MaterialTheme.typography.bodySmall)
             HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                 DiagLog.recent(30).forEach { e ->

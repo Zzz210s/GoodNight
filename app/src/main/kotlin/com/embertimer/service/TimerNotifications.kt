@@ -83,14 +83,24 @@ object TimerNotifications {
         // Chronometer 的 base 必须基于 elapsedRealtime(墙钟 endWall 会导致倒计时错/空);暂停态定格文本
         if (paused) {
             rv.setTextViewText(R.id.notif_time, DurationFormat.ms(snap.timeAtPause))
+            com.embertimer.diag.DiagLog.add("Notif", "计时通知 暂停态 定格=${DurationFormat.ms(snap.timeAtPause)}")
         } else if (!countUp && snap.endElapsed <= android.os.SystemClock.elapsedRealtime()) {
             // v1.10.11:倒计时已过 00:00 —— 系统 Chronometer 会继续往负数走(Doze/进程被冻结时
             // 到点推进来不及),这里改为静态 00:00,任何情况下都不出现负数计时。
             rv.setTextViewText(R.id.notif_time, "00:00")
+            com.embertimer.diag.DiagLog.add(
+                "Notif",
+                "计时通知 已过期静态00:00 剩余=${snap.endElapsed - android.os.SystemClock.elapsedRealtime()}ms 相位=${snap.phase}",
+            )
         } else {
             val spec = buildClockSpec(snap)
             rv.setChronometerCountDown(R.id.notif_time, spec.countDown)
             rv.setChronometer(R.id.notif_time, spec.base, null, true)
+            com.embertimer.diag.DiagLog.add(
+                "Notif",
+                "计时通知 Chronometer base=${spec.base} 倒计时=${spec.countDown} 相位=${snap.phase} " +
+                    "剩余=${snap.endElapsed - android.os.SystemClock.elapsedRealtime()}ms",
+            )
         }
 
         // 行2 图标按钮:终止 | 开始/暂停 | 跳过(正计时无跳过)

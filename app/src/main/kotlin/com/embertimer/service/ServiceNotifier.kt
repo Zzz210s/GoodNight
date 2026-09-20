@@ -6,8 +6,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.embertimer.R
 import com.embertimer.di.AppGraph
+import com.embertimer.diag.DiagLog
+import com.embertimer.timer.EngineStatus
 import com.embertimer.timer.RuntimeSnapshot
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -15,6 +19,11 @@ import kotlinx.coroutines.launch
  * 通知/提醒反应(v1.12.0 重写为 **Context 版**):不再依赖 Service —— 因为到期推进要能
  * 在"只有广播唤起的进程"里完成(不需要前台服务),所以通知发布必须在无服务时也可用。
  * 前台化(startForeground)由服务通过 [attachForeground] 注入;未挂载时只发通知。
+ *
+ * v1.12.3 增加**到期钳制**:通知栏倒计时是系统 Chronometer 绘制的,base 过后会继续显示负数,
+ * 而"到点推进"受 ticker/闹钟调度影响可能晚几十毫秒到几秒。这里在 endElapsed+250ms 主动重发一次
+ * 通知:引擎已推进 → 重发新阶段倒计时;尚未推进 → 走"已过期 → 静态 00:00"分支。
+ * 进程存活时负数窗口由此消除(进程被 OEM 冻结时无法自救,只能靠精确闹钟把它拉起来)。
  */
 class ServiceNotifier(
     private val context: Context,
@@ -23,6 +32,8 @@ class ServiceNotifier(
 ) {
     /** 服务挂载时的前台化回调(未挂载 = null:仅 notify) */
     @Volatile private var foregroundSink: ((Notification) -> Unit)? = null
+
+    private var clampJob: Job? = null
 
     fun attachForeground(sink: ((Notification) -> Unit)?) {
         foregroundSink = sink
@@ -36,12 +47,33 @@ class ServiceNotifier(
             context.getSystemService(android.app.NotificationManager::class.java)
                 ?.notify(TimerNotifications.ID_NOTIFY, n)
         }
-        com.embertimer.diag.DiagLog.add("Notif", "发布通知 有快照=${snap != null} 前台化=${foregroundSink != null}")
+        DiagLog.add(
+            "Notif",
+            "发布通知 有快照=${snap != null} 前台化=${foregroundSink != null} ${DiagLog.env()}",
+        )
         foregroundSink?.invoke(n)
+        scheduleExpiryClamp(snap)
+    }
+
+    /** 到期钳制:进程存活时保证 00:00 之后不会继续显示负数 */
+    private fun scheduleExpiryClamp(snap: RuntimeSnapshot?) {
+        clampJob?.cancel()
+        if (snap == null || snap.status != EngineStatus.RUNNING || snap.countUp) return
+        val wait = snap.endElapsed - graph.time.elapsedRealtime() + 250
+        if (wait <= 0) return
+        clampJob = scope.launch {
+            delay(wait)
+            val cur = graph.engine.snapshot.value ?: return@launch
+            if (cur.status != EngineStatus.RUNNING || cur.countUp) return@launch
+            val late = graph.time.elapsedRealtime() - cur.endElapsed
+            if (late < 0) return@launch
+            DiagLog.add("Notif", "到期钳制重发 迟到=${late}ms ${DiagLog.env()}")
+            post(cur)
+        }
     }
 
     /**
-     * 播放强提醒并发 heads-up 通知,数秒自停,无需交互。
+     * 播放提醒并发 heads-up 通知,数秒自停,无需交互。
      * 通知与播放均在锁外协程内执行:ensureChannels/notify 是同步 binder 调用,
      * 在引擎锁临界区内直接调用会拖长持锁时间。
      */
@@ -58,6 +90,7 @@ class ServiceNotifier(
             runCatching {
                 nm.notify(TimerNotifications.ID_NOTIFY, TimerNotifications.phaseDone(context, workFinished))
             }
+            DiagLog.add("Remind", "阶段完成通知 工作结束=$workFinished")
         }
     }
 }

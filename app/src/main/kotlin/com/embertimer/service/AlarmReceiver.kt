@@ -21,7 +21,7 @@ class AlarmReceiver : BroadcastReceiver() {
             // 事件订阅握手:必须在推进前完成(replay=0,无订阅者时事件会丢 → 结算/重武装丢失)
             g.coordinator.awaitReadyAndSubscribed()
             com.embertimer.diag.DiagLog.add("Alarm", "到期闹钟送达")
-            val advanced = g.coordinator.advanceIfExpired()
+            val advanced = g.coordinator.advanceIfExpired(source = "到期闹钟")
             val snap = g.engine.snapshot.value
             // 仍未到期(闹钟早到/误触发):补武装一次,避免后续到点无人唤醒
             if (!advanced && snap != null && snap.status == EngineStatus.RUNNING && !snap.countUp) {

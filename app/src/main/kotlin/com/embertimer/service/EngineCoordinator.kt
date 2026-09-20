@@ -90,13 +90,22 @@ class EngineCoordinator(private val graph: AppGraph) {
     /**
      * **到期推进**(闹钟接收器/服务/UI 共用)。仅"运行中 + 倒计时 + 已到期"才动作;
      * 返回是否真的推进了。幂等:主闹钟与安全网闹钟先后送达不会重复推进。
+     * @param source 触发来源(闹钟/服务/UI),用于诊断日志定位负计时窗口
      */
-    suspend fun advanceIfExpired(): Boolean = mutex.withLock {
+    suspend fun advanceIfExpired(source: String = "unknown"): Boolean = mutex.withLock {
         val s = graph.engine.snapshot.value
         if (s == null || s.status != EngineStatus.RUNNING || s.countUp) return@withLock false
-        if (s.endElapsed > graph.time.elapsedRealtime()) return@withLock false
+        val now = graph.time.elapsedRealtime()
+        if (s.endElapsed > now) return@withLock false
+        // 迟到量 = 通知栏 Chronometer 越过 00:00 往负数走的时长(系统绘制,应用无法制止)
+        val late = now - s.endElapsed
         graph.engine.onExpired()
-        com.embertimer.diag.DiagLog.add("Eng", "到期推进：${graph.engine.snapshot.value?.phase} 循环${graph.engine.snapshot.value?.cycleCount}")
+        val after = graph.engine.snapshot.value
+        com.embertimer.diag.DiagLog.add(
+            "Eng",
+            "到期推进($source) 迟到=${late}ms ${com.embertimer.diag.DiagLog.env()} " +
+                "→ 相位=${after?.phase} 循环${after?.cycleCount}",
+        )
         true
     }
 

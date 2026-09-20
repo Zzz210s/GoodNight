@@ -1,44 +1,33 @@
 package com.embertimer.service
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.Ringtone
-import android.media.RingtoneManager
-import android.os.Handler
-import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import com.embertimer.data.ReminderIntensity
 
+/**
+ * 阶段提醒播放(v1.12.3 调整):**只振动,不响铃**。
+ *
+ * 到点提示 = 振动 + 通知(通知渠道本身已 `setSound(null, null)`),不再播放系统闹铃/通知音,
+ * 避免在图书馆、课堂、会议等场合外放。强度设置仍决定振动:
+ * - LIGHT    : 不振动(完全安静,仅通知)
+ * - STANDARD : 两次短振
+ * - STRONG   : 三次长振
+ */
 class ReminderPlayer(private val context: Context) {
-    private val handler = Handler(Looper.getMainLooper())
-    private var ringtone: Ringtone? = null
-
     fun play(intensity: ReminderIntensity) {
         val durMs = durationMs(intensity)
-        if (durMs <= 0) return
+        if (durMs <= 0) {
+            com.embertimer.diag.DiagLog.add("Remind", "提醒(静默)强度=$intensity")
+            return
+        }
         vibrate(pattern(intensity))
-        stopRingtone()
-        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
-        val rt = RingtoneManager.getRingtone(context, uri) ?: return
-        rt.audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        ringtone = rt
-        rt.play()
-        handler.postDelayed({ stopRingtone() }, durMs.toLong())
+        com.embertimer.diag.DiagLog.add("Remind", "提醒(仅振动)强度=$intensity 上限=${durMs}ms")
     }
 
     private fun vibrate(pattern: LongArray) {
         val v = context.getSystemService(Vibrator::class.java) ?: return
         runCatching { v.vibrate(VibrationEffect.createWaveform(pattern, -1)) }
-    }
-
-    private fun stopRingtone() {
-        ringtone?.stop()
-        ringtone = null
     }
 
     companion object {

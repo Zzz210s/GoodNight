@@ -27,9 +27,16 @@ internal class TickDriver(
             try {
                 mutex.withLock {
                     val snap = graph.engine.snapshot.value
+                    val now = graph.time.elapsedRealtime()
                     if (snap != null && snap.status == EngineStatus.RUNNING &&
-                        snap.endElapsed <= graph.time.elapsedRealtime()
+                        snap.endElapsed <= now
                     ) {
+                        // 迟到量 = 系统 Chronometer 已在通知栏显示负数的时长
+                        com.embertimer.diag.DiagLog.add(
+                            "Tick",
+                            "ticker 到期推进 迟到=${now - snap.endElapsed}ms " +
+                                "${com.embertimer.diag.DiagLog.env()} 相位=${snap.phase}",
+                        )
                         graph.engine.onExpired()
                     }
                     ledger.flush(graph.engine.snapshot.value, graph.time.elapsedRealtime(), force = false)

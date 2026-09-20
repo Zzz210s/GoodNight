@@ -87,6 +87,12 @@ class AlarmReceiverTest {
         return shadowOf(am).peekNextScheduledAlarm()?.triggerAtTime
     }
 
+    /** 全部已武装闹钟的触发时刻(主闹钟=墙钟轴,安全网=elapsed 轴,数值量级不同) */
+    private fun scheduledTriggers(): List<Long> {
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        return shadowOf(am).scheduledAlarms.map { it.triggerAtTime }
+    }
+
     /** 到点:接收器直接推进到 REST,并按新阶段武装下一段闹钟 */
     @Test fun expiredRunningAdvancesPhaseInProcess() {
         val g = graphFor("rx_expired_ok", null)
@@ -114,15 +120,24 @@ class AlarmReceiverTest {
         assertNull(shadowOf(app).peekNextStartedService())
     }
 
-    /** 未到期:引擎不动,重新武装到期闹钟,拉起服务 */
+    /** 未到期:引擎不动,重新武装到期闹钟(主=setAlarmClock 墙钟 / 安全网=elapsed),拉起服务 */
     @Test fun activeRunningRearmsAndStartsService() {
         var end = 0L
         val g = graphFor("rx_active", null)
         end = g.time.elapsedRealtime() + 300_000
         runBlocking { g.engine.restore(snap(EngineStatus.RUNNING, end)) }
         fire()
-        awaitCond { nextAlarmTrigger() != null }
-        assertEquals(end, nextAlarmTrigger())
+        // 接收器在协程里先后武装两个闹钟:等到两个都到齐再断言,避免读到中间态
+        awaitCond { scheduledTriggers().size >= 2 }
+        val triggers = scheduledTriggers()
+        assertTrue(
+            "安全网闹钟应落在 elapsed 轴的 end+45s:$triggers",
+            triggers.contains(end + SAFETY_MS),
+        )
+        assertTrue(
+            "主闹钟应是墙钟触发的用户可见闹钟(setAlarmClock):$triggers",
+            triggers.any { it >= System.currentTimeMillis() + 250_000 },
+        )
         awaitCond { shadowOf(app).peekNextStartedService() != null }
         assertNotNull(shadowOf(app).nextStartedService)
     }
