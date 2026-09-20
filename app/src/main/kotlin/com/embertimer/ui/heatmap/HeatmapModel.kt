@@ -23,43 +23,58 @@ enum class HeatLevel { NONE, L1, L2, L3, L4, L5 }
 /**
  * 色阶分档(v1.14.0):**绝对标准 + 相对标准结合**。
  *
- * - **相对**:以"典型一天"([anchorMs],取非零日的中位数)为 1.0,按 0.5 / 1 / 2 / 3 倍分成五档 ——
- *   这样色阶随用户自己的量级伸缩:轻度用户 1 小时的一天也能显出深浅,重度用户 3 小时的常态不会挤成一色。
- * - **绝对**:典型一天本身被夹在 [ANCHOR_MIN_MS, ANCHOR_MAX_MS] 内(30 分钟 ~ 2 小时)——
- *   数据极少(全是 5 分钟)或极多(动辄 6 小时)时色阶不会被拉得失真;无数据时用 [DEFAULT_ANCHOR_MS]。
- *
- * 由此各档边界落在 15 分钟 ~ 6 小时之间,既有绝对意义又贴合个人量级。
+ * - **相对**:四个分档边界取非零日总量的 **20 / 40 / 60 / 80 分位** —— 色阶随用户自己的量级伸缩,
+ *   重度用户的常态不会挤成一色,轻度用户的较好一天也能显出深浅。
+ * - **绝对**:每个分位都被夹在**绝对区间**内(见 [ABSOLUTE_BOUNDS]),保证任何数据量下色阶都有
+ *   实际意义:全是 5 分钟的日子不会因为"相对最高"而变成最深档,动辄 6 小时的重度用户也不会把
+ *   2 小时的一天看成最浅档。无数据时用 [DEFAULT_BOUNDS]。
  */
 object HeatmapLevels {
-    const val ANCHOR_MIN_MS: Long = 30 * 60_000L
-    const val ANCHOR_MAX_MS: Long = 2 * 3_600_000L
+    /** 相对分位点(非零日总量) */
+    private val PERCENTILES = listOf(20, 40, 60, 80)
 
-    /** 无数据/无有效锚点时的典型一天:1 小时 */
-    const val DEFAULT_ANCHOR_MS: Long = 3_600_000L
+    /** 各分位对应的绝对夹紧区间(下界~上界,ms)—— 绝对标准所在 */
+    private val ABSOLUTE_BOUNDS = listOf(
+        20 * 60_000L to 40 * 60_000L, // L1/L2:20 ~ 40 分钟
+        40 * 60_000L to 90 * 60_000L, // L2/L3:40 分钟 ~ 1.5 小时
+        60 * 60_000L to 3 * 3_600_000L, // L3/L4:1 ~ 3 小时
+        90 * 60_000L to 6 * 3_600_000L, // L4/L5:1.5 ~ 6 小时
+    )
 
-    /** 相对分档系数:L1 < 0.5×锚点,L2 < 1×,L3 < 2×,L4 < 3×,L5 >= 3× */
-    private val FACTORS = listOf(0.5, 1.0, 2.0, 3.0)
+    /** 无数据时的边界:30 分钟 / 1 小时 / 2 小时 / 4 小时 */
+    val DEFAULT_BOUNDS: List<Long> = listOf(30 * 60_000L, 60 * 60_000L, 2 * 3_600_000L, 4 * 3_600_000L)
 
-    /** 典型一天 = 非零日总量的中位数,夹在绝对窗口内 */
-    fun anchorMs(dayTotals: Collection<Long>): Long {
+    /** 由数据算出四个边界:分位数各自夹在绝对区间内,并保证严格递增。有效数据少于 3 天时退回缺省绝对边界(分位无意义) */
+    fun boundsMs(dayTotals: Collection<Long>): List<Long> {
         val positives = dayTotals.filter { it > 0 }.sorted()
-        if (positives.isEmpty()) return DEFAULT_ANCHOR_MS
-        val mid = positives.size / 2
-        val median = if (positives.size % 2 == 1) positives[mid]
-        else (positives[mid - 1] + positives[mid]) / 2
-        return median.coerceIn(ANCHOR_MIN_MS, ANCHOR_MAX_MS)
+        if (positives.size < MIN_DAYS_FOR_RELATIVE) return DEFAULT_BOUNDS
+        var prev = 0L
+        return PERCENTILES.mapIndexed { i, p ->
+            val (lo, hi) = ABSOLUTE_BOUNDS[i]
+            val value = maxOf(percentile(positives, p).coerceIn(lo, hi), prev + 1)
+            prev = value
+            value
+        }
     }
 
-    fun of(millis: Long, anchorMs: Long = DEFAULT_ANCHOR_MS): HeatLevel {
+    /** 少于这么多天有效数据时,相对分位不可靠 → 用缺省绝对边界 */
+    private const val MIN_DAYS_FOR_RELATIVE = 3
+
+    fun of(millis: Long, bounds: List<Long> = DEFAULT_BOUNDS): HeatLevel {
         if (millis <= 0) return HeatLevel.NONE
-        val a = anchorMs.coerceIn(ANCHOR_MIN_MS, ANCHOR_MAX_MS)
-        return when {
-            millis < a * FACTORS[0] -> HeatLevel.L1
-            millis < a * FACTORS[1] -> HeatLevel.L2
-            millis < a * FACTORS[2] -> HeatLevel.L3
-            millis < a * FACTORS[3] -> HeatLevel.L4
-            else -> HeatLevel.L5
-        }
+        bounds.forEachIndexed { i, b -> if (millis < b) return HeatLevel.entries[i + 1] }
+        return HeatLevel.L5
+    }
+
+    /** 线性插值分位数(数据量小也稳定) */
+    private fun percentile(sorted: List<Long>, p: Int): Long {
+        if (sorted.size == 1) return sorted[0]
+        val idx = (p / 100.0) * (sorted.size - 1)
+        val lo = idx.toInt()
+        val hi = kotlin.math.ceil(idx).toInt()
+        if (lo == hi) return sorted[lo]
+        val frac = idx - lo
+        return (sorted[lo] * (1 - frac) + sorted[hi] * frac).toLong()
     }
 }
 
@@ -76,7 +91,7 @@ private val MONTH_ABBREVIATIONS = mapOf(
  * 色阶锚点(典型一天)由**全部非零日**的中位数得出,再夹在绝对窗口内(见 [HeatmapLevels])。 */
 fun buildHeatmapModel(days: Map<LocalDate, Long>, today: LocalDate): HeatmapModel {
     val firstDataDate = days.keys.minOrNull() ?: today
-    val anchor = HeatmapLevels.anchorMs(days.values)
+    val bounds = HeatmapLevels.boundsMs(days.values)
     // 周日对齐:首个使用日所在周的周日
     val first = firstDataDate.minusDays((firstDataDate.dayOfWeek.value % 7).toLong())
     val weekStarts = generateSequence(first) { it.plusWeeks(1) }
@@ -87,7 +102,7 @@ fun buildHeatmapModel(days: Map<LocalDate, Long>, today: LocalDate): HeatmapMode
     fun cellOf(d: LocalDate): DayCell? = when {
         d.isAfter(today) -> null
         d.isBefore(firstDataDate) -> null
-        else -> DayCell(d, days[d] ?: 0L, HeatmapLevels.of(days[d] ?: 0L, anchor))
+        else -> DayCell(d, days[d] ?: 0L, HeatmapLevels.of(days[d] ?: 0L, bounds))
     }
 
     val columns = weekStarts.map { ws ->

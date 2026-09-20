@@ -43,33 +43,37 @@ class HeatmapModelTest {
         assertTrue(cells.any { it.date == LocalDate.of(2026, 8, 28) })
     }
 
-    @Test fun anchorIsMedianOfNonZeroDaysClamped() {
-        // 无数据 → 默认 1 小时
-        assertEquals(HeatmapLevels.DEFAULT_ANCHOR_MS, HeatmapLevels.anchorMs(emptyList()))
-        assertEquals(HeatmapLevels.DEFAULT_ANCHOR_MS, HeatmapLevels.anchorMs(listOf(0L, 0L)))
-        // 中位数(奇数个)
-        assertEquals(60 * 60_000L, HeatmapLevels.anchorMs(listOf(20 * 60_000L, 60 * 60_000L, 200 * 60_000L)))
-        // 中位数(偶数个取中间两值平均)
-        assertEquals(45 * 60_000L, HeatmapLevels.anchorMs(listOf(30 * 60_000L, 60 * 60_000L)))
-        // 绝对窗口夹紧:数据极小/极大的用户色阶不失真
-        assertEquals(HeatmapLevels.ANCHOR_MIN_MS, HeatmapLevels.anchorMs(listOf(5 * 60_000L)))
-        assertEquals(HeatmapLevels.ANCHOR_MAX_MS, HeatmapLevels.anchorMs(listOf(6 * 3_600_000L)))
+    @Test fun boundsAreClampedAndMonotonic() {
+        // 无数据/全零/有效数据不足 3 天 → 缺省绝对边界
+        assertEquals(HeatmapLevels.DEFAULT_BOUNDS, HeatmapLevels.boundsMs(emptyList()))
+        assertEquals(HeatmapLevels.DEFAULT_BOUNDS, HeatmapLevels.boundsMs(listOf(0L, 0L)))
+        assertEquals(HeatmapLevels.DEFAULT_BOUNDS, HeatmapLevels.boundsMs(listOf(3_600_000L, 0L)))
+        // 数据极小:分位被绝对下界兜住(20/40/60/90 分钟)
+        assertEquals(
+            listOf(20 * 60_000L, 40 * 60_000L, 60 * 60_000L, 90 * 60_000L),
+            HeatmapLevels.boundsMs(listOf(5 * 60_000L, 6 * 60_000L, 7 * 60_000L)),
+        )
+        // 数据极大:分位被绝对上界兜住(40 分钟 / 1.5 / 3 / 6 小时)
+        assertEquals(
+            listOf(40 * 60_000L, 90 * 60_000L, 3 * 3_600_000L, 6 * 3_600_000L),
+            HeatmapLevels.boundsMs(listOf(5 * 3_600_000L, 6 * 3_600_000L, 7 * 3_600_000L)),
+        )
+        // 任意输入都单调递增(不出现交叉)
+        val b = HeatmapLevels.boundsMs(listOf(1_000L, 20 * 60_000L, 10 * 3_600_000L))
+        assertTrue(b.zipWithNext().all { (x, y) -> y > x })
     }
 
-    @Test fun levelsFollowAnchorWithAbsoluteClamp() {
-        val hour = 3_600_000L
-        // 典型一天 1 小时 → 边界 30m / 1h / 2h / 3h
-        assertEquals(HeatLevel.NONE, HeatmapLevels.of(0, hour))
-        assertEquals(HeatLevel.L1, HeatmapLevels.of(29 * 60_000L, hour))
-        assertEquals(HeatLevel.L2, HeatmapLevels.of(30 * 60_000L, hour))
-        assertEquals(HeatLevel.L3, HeatmapLevels.of(hour, hour))
-        assertEquals(HeatLevel.L4, HeatmapLevels.of(2 * hour, hour))
-        assertEquals(HeatLevel.L5, HeatmapLevels.of(3 * hour, hour))
-        // 轻量用户(绝对下界 30 分钟作锤点)→ 边界 15m / 30m / 1h / 1.5h
-        assertEquals(HeatLevel.L2, HeatmapLevels.of(20 * 60_000L, HeatmapLevels.ANCHOR_MIN_MS))
-        assertEquals(HeatLevel.L5, HeatmapLevels.of(90 * 60_000L, HeatmapLevels.ANCHOR_MIN_MS))
-        // 重度用户(绝对上界 2 小时作锤点)→ 边界 1h / 2h / 4h / 6h:1 小时的一天只是第二档
-        assertEquals(HeatLevel.L2, HeatmapLevels.of(hour, HeatmapLevels.ANCHOR_MAX_MS))
+    @Test fun levelsFollowBounds() {
+        val bounds = listOf(30 * 60_000L, 60 * 60_000L, 2 * 3_600_000L, 3 * 3_600_000L)
+        assertEquals(HeatLevel.NONE, HeatmapLevels.of(0, bounds))
+        assertEquals(HeatLevel.L1, HeatmapLevels.of(29 * 60_000L, bounds))
+        assertEquals(HeatLevel.L2, HeatmapLevels.of(30 * 60_000L, bounds))
+        assertEquals(HeatLevel.L3, HeatmapLevels.of(3_600_000L, bounds))
+        assertEquals(HeatLevel.L4, HeatmapLevels.of(2 * 3_600_000L, bounds))
+        assertEquals(HeatLevel.L5, HeatmapLevels.of(3 * 3_600_000L, bounds))
+        // 缺省边界(无数据)= 30 分钟 / 1 小时 / 2 小时 / 4 小时
+        assertEquals(HeatLevel.L3, HeatmapLevels.of(3_600_000L))
+        assertEquals(HeatLevel.L5, HeatmapLevels.of(4 * 3_600_000L))
     }
 
     @Test fun relativeScaleAmplifiesLightUserGradient() {

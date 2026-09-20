@@ -12,10 +12,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 - The Chinese UI wording "专注" (focus) is now "累计" (total) throughout (reports, day detail,
   notification channel names); the English copy was aligned to match.
 - **Heatmap ramp is now five steps instead of four**, and its bucketing changed from purely absolute to a
-  **hybrid of absolute + relative**: a "typical day" (median of all non-zero day totals, clamped into an
-  absolute 30-minute to 2-hour window) counts as 1.0, and buckets follow 0.5 / 1 / 2 / 3 times that anchor.
-  The ramp therefore scales with the user's own volume (a light user's better day still reads darker) without
-  being distorted by very small or very large data sets.
+  **hybrid of absolute + relative**: the four boundaries are the **20/40/60/80th percentiles** of all non-zero
+  day totals (relative, so the ramp scales with the user's own volume), each clamped into an absolute range
+  (boundary 1: 20 – 40 min, boundary 2: 40 min – 1.5 h, boundary 3: 1 – 3 h, boundary 4: 1.5 – 6 h) so very
+  small or very large data sets still produce a meaningful ramp. With fewer than 3 days of data it falls back
+  to the default absolute boundaries (30 min / 1 h / 2 h / 4 h).
 
 ### Added
 - **Fatigue reminder**: after **90 minutes** of continuous work on the same task (short breaks in between
