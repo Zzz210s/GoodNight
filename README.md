@@ -49,6 +49,10 @@ The core problem of pomodoro-style apps is background reliability: lock screen, 
 
 Requires Android 8.0 (API 26) or newer.
 
+> **v2.0.0 changes the package name** (`com.embertimer` → `com.goodnight`): it is a **new app identity**, so it
+> cannot upgrade over an older install in place. To migrate: back up in the old version (Settings → Backup →
+> Backup), uninstall the old app, install 2.0.0, then restore the backup in Settings.
+
 - Download the APK from [Releases](https://github.com/Zzz210s/GoodNight/releases) (v0.3.0+ is release-signed and installs directly; note that upgrading over a debug-signed v0.2.0 install requires uninstalling first).
 - Or build from source:
 

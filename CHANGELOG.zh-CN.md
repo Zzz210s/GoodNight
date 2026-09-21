@@ -7,12 +7,24 @@
 ## [未发布]
 - Trunk 分支模型 + GitHub Actions CI(测试门禁 + 打标签自动发布)。
 
+## [2.0.0] - 2026-09-20
+### 破坏性变更
+- **包名改为 `com.goodnight`**(原 `com.embertimer`):这是新的应用身份,旧版不能覆盖升级 ——
+  升级步骤为「在旧版备份 → 卸载旧版 → 安装 2.0.0 → 恢复备份」。同时更名:数据库文件
+  `goodnight.db`、备份文件 `goodnight-backup.json`、通知渠道 id `goodnight_timer`、
+  诊断日志 tag `GoodNightDiag`、签名密钥别名 `goodnight`(证书不变,签名身份一致)。
+- 签名密钥移出仓库,只保留在 CI secret(仓库历史里仍有旧副本;要彻底消除需轮换密钥,那会使
+  后续版本签名身份变化)。
+
+### 变更
+- 包含 1.15.0 的全部更名内容(良夜 / GoodNight)。
+
 ## [1.15.0] - 2026-09-20
 ### 变更
 - 项目更名为**良夜(GoodNight)** —— 取自狄兰·托马斯「不要温和地走进那个良夜」(Do not go gentle into that good night)。
   应用显示名(中文「良夜」/ 英文「GoodNight」)、通知渠道组名、主题名、README 与架构图、仓库名、
   发布资产名(`GoodNight-<版本>.apk`)与签名密钥文件名同步更新。
-  Android 包名(com.embertimer)、数据库文件名、备份文件名与通知渠道 id 保持不变 —— 老版本可直接覆盖升级,
+  Android 包名(com.goodnight)、数据库文件名、备份文件名与通知渠道 id 保持不变 —— 老版本可直接覆盖升级,
   本机数据与备份目录授权不受影响。
 
 ## [1.14.0] - 2026-09-20
@@ -50,8 +62,8 @@
   强度设置仍决定振动方式(LIGHT = 完全安静,STANDARD = 两次短振,STRONG = 三次长振)。
 
 ### 新增(仅 debug 构建)
-- **诊断日志落盘**:每条同时写 logcat(`EmberDiag`)与
-  `Android/data/com.embertimer/files/diag.log`(超 512 KiB 滚动为 `diag.log.1`),
+- **诊断日志落盘**:每条同时写 logcat(`GoodNightDiag`)与
+  `Android/data/com.goodnight/files/diag.log`(超 512 KiB 滚动为 `diag.log.1`),
   屏幕关闭期间发生的问题不再随进程消失,`adb pull` 即可取。
 - **负计时证据日志**:到期推进记录迟到量(`到期推进 迟到=<ms>`、`ticker 到期推进 迟到=<ms>`)
   并附带 Doze/屏幕状态(`idle=... screen=...`);闹钟武装/取消也记录是否精确与目标时刻。

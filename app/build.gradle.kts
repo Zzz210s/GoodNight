@@ -8,16 +8,16 @@ plugins {
 }
 
 android {
-    namespace = "com.embertimer"
+    namespace = "com.goodnight"
     compileSdk = 35
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "com.embertimer"
+        applicationId = "com.goodnight"
         minSdk = 26
         targetSdk = 35
-        versionCode = 65
-        versionName = "1.15.0"
+        versionCode = 66
+        versionName = "2.0.0"
     }
     val keystoreProps = rootProject.file("local.properties").let { f ->
         if (f.exists()) Properties().apply { f.inputStream().use { load(it) } } else null

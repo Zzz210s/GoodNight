@@ -7,13 +7,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [2.0.0] - 2026-09-20
+### Breaking
+- **Package name changed to `com.goodnight`** (was `com.embertimer`): this is a new app identity, so it cannot
+  upgrade over an older install in place — back up in the old version, uninstall it, install 2.0.0, then restore.
+  Renamed along with it: database file `goodnight.db`, backup file `goodnight-backup.json`, notification channel id
+  `goodnight_timer`, diagnostics log tag `GoodNightDiag`, signing key alias `goodnight` (same certificate, so the
+  signing identity is unchanged).
+- The signing keystore is no longer committed to the repository; it lives only in the CI secret (an old copy remains
+  in git history — removing it entirely would require rotating the key, which would change the signing identity of
+  future releases).
+
+### Changed
+- Includes all of the 1.15.0 rename work (良夜 / GoodNight).
+
 ## [1.15.0] - 2026-09-20
 ### Changed
 - Project renamed to **GoodNight** (良夜) — from Dylan Thomas's "Do not go gentle into that good night".
   The app display name (Chinese 良夜 / English GoodNight), notification channel group name, theme name,
   README and architecture diagram, repository name, release asset name (`GoodNight-<version>.apk`) and the
   signing keystore file name were updated together.
-  The Android package name (com.embertimer), database file name, backup file name and notification channel id
+  The Android package name (com.goodnight), database file name, backup file name and notification channel id
   are unchanged — existing installs upgrade in place with their data and backup-folder grant intact.
 
 ## [1.14.0] - 2026-09-20
@@ -60,8 +74,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
   pattern (LIGHT = fully silent, STANDARD = two short buzzes, STRONG = three long buzzes).
 
 ### Added (debug builds only)
-- **Diagnostic log is now persisted**: every entry goes to logcat (`EmberDiag`) *and* to
-  `Android/data/com.embertimer/files/diag.log` (512 KiB cap, rolls to `diag.log.1`), so an incident that
+- **Diagnostic log is now persisted**: every entry goes to logcat (`GoodNightDiag`) *and* to
+  `Android/data/com.goodnight/files/diag.log` (512 KiB cap, rolls to `diag.log.1`), so an incident that
   happens while the screen is off survives; pull it with `adb pull`.
 - **Negative-countdown evidence logging**: phase advances record how late they were
   (`到期推进 迟到=<ms>`, `ticker 到期推进 迟到=<ms>`) together with Doze/screen state
