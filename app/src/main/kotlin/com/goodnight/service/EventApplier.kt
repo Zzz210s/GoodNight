@@ -83,10 +83,16 @@ internal class EventApplier(
                     // TaskSwitched 本身在此不产生任何动作:切点已由引擎记入快照并随结算事件下发。
                     val cuts = ev.taskCutsOf()
                     val headTaskId = cuts.minByOrNull { it.first }?.second ?: ev.taskIdOf()
+                    // v2.1:落库前校验任务仍在 —— deleteTask 只清库内引用、不清运行态绑定,
+                    // 「运行中删除已绑定任务 → 结算」会把已删 id 写进段落(日合计仍含这段时间,
+                    // 但按任务报表会漏/异常)。丢弃后整段/该段归未绑定,与「删除保留时间账、归未绑定」
+                    // 口径一致(与 Task 6 补的 engine.setTask(null) 双保险)。
+                    val known = (listOfNotNull(headTaskId) + cuts.mapNotNull { it.third })
+                        .distinct().filter { graph.taskRepo.exists(it) }.toSet()
                     graph.totalsRepo.recordWorkSessionSplit(
                         pid, ss, se, ev.pauseWindows(),
-                        taskId = headTaskId,
-                        taskCuts = cuts.map { it.first to it.third },
+                        taskId = headTaskId?.takeIf { known.contains(it) },
+                        taskCuts = cuts.map { c -> c.first to c.third?.takeIf { known.contains(it) } },
                     )
                 }
             }

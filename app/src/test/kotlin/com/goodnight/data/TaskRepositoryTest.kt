@@ -100,6 +100,17 @@ class TaskRepositoryTest {
         assertNull(repo.titleById(9_999L))
     }
 
+    /** v2.1 Task 5:存在性校验(落库前丢弃已删 id);已完成任务仍算存在 */
+    @Test fun existsCoversActiveDoneDeletedAndUnknown() = runTest {
+        val id = repo.create("写周报", now = 1)!!
+        assertTrue(repo.exists(id))
+        repo.setDone(id, done = true, now = 2_000)
+        assertTrue(repo.exists(id))
+        repo.deleteTask(id)
+        assertEquals(false, repo.exists(id))
+        assertEquals(false, repo.exists(9_999L))
+    }
+
     @Test fun setDoneMovesBetweenListsAndStampsDoneAt() = runTest {
         val id = repo.create("写周报", now = 1)!!
         repo.setDone(id, done = true, now = 9_000)

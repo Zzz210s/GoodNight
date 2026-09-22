@@ -28,6 +28,12 @@ class TaskRepository(private val db: GoodNightDatabase) {
     /** v2.1 Task 5:按 id 取标题(通知标题拼接用);未知 id 返回 null,已完成任务照常返回 */
     suspend fun titleById(id: Long): String? = dao.titleById(id)
 
+    /**
+     * v2.1 Task 5:任务是否存在(落库前校验)。运行态绑定不因删除而清(见 Task 6),
+     * 落库前必须用它丢弃已删任务的 id,否则会写出指向已删任务的孤儿引用。
+     */
+    suspend fun exists(id: Long): Boolean = dao.exists(id)
+
     /** 校验口径同 [create];不合法时静默不改(行不存在也静默) */
     suspend fun rename(id: Long, title: String) {
         val t = title.trim()

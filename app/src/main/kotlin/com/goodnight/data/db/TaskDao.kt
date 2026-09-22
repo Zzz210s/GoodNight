@@ -39,6 +39,9 @@ interface TaskDao {
      * 被标记完成的任务,通知仍要显示它的名字。未知 id 返回 null。
      */
     @Query("SELECT title FROM task WHERE id = :id") suspend fun titleById(id: Long): String?
+
+    /** v2.1 Task 5:落库前校验任务仍在 —— 运行态可能还带着已删任务的 id */
+    @Query("SELECT EXISTS(SELECT 1 FROM task WHERE id = :id)") suspend fun exists(id: Long): Boolean
     /** 末尾排序位;空表返回 null,调用方按 0 起算 */
     @Query("SELECT MAX(sortOrder) FROM task") suspend fun maxSortOrder(): Long?
 

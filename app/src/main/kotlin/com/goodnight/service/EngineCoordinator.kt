@@ -112,18 +112,31 @@ class EngineCoordinator(private val graph: AppGraph) {
         true
     }
 
-    /** 进程启动/服务启动/开机对账 */
-    suspend fun reconcile(awaitingStart: Boolean) = mutex.withLock {
-        when (Reconciler.decide(graph.engine.snapshot.value, graph.time.elapsedRealtime())) {
-            ReconcileAction.STOP_SELF -> if (!awaitingStart) teardown()
-            ReconcileAction.FINISH_EXPIRED -> graph.engine.onExpired()
-            ReconcileAction.RESUME_ACTIVE, ReconcileAction.SHOW_PAUSED -> {
-                val s = graph.engine.snapshot.value
-                notifier.post(s, notifier.titleFor(s))
-                // 活跃态重新武装到期闹钟(服务死后闹钟可能已被系统清理)
-                graph.alarmScheduler.arm(s)
+    /**
+     * 进程启动/服务启动/开机对账。
+     * 通知发布(含标题 DB 读)放到**锁外**:`titleFor` 是挂起 + 一次 DB 往返,
+     * 留在临界区会顶住事件派发/ticker/闹钟推进(与 [ServiceNotifier] 头注释、TickDriver 同纪律)。
+     */
+    suspend fun reconcile(awaitingStart: Boolean) {
+        val postSnap = mutex.withLock {
+            when (Reconciler.decide(graph.engine.snapshot.value, graph.time.elapsedRealtime())) {
+                ReconcileAction.STOP_SELF -> {
+                    if (!awaitingStart) teardown()
+                    null
+                }
+                ReconcileAction.FINISH_EXPIRED -> {
+                    graph.engine.onExpired()
+                    null
+                }
+                ReconcileAction.RESUME_ACTIVE, ReconcileAction.SHOW_PAUSED -> {
+                    val s = graph.engine.snapshot.value
+                    // 活跃态重新武装到期闹钟(服务死后闹钟可能已被系统清理)
+                    graph.alarmScheduler.arm(s)
+                    s
+                }
             }
         }
+        if (postSnap != null) notifier.post(postSnap, notifier.titleFor(postSnap))
     }
 
     /** 执行命令(服务 onStartCommand 与测试共用) */

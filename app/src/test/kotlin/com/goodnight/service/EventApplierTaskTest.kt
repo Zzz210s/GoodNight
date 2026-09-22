@@ -115,6 +115,41 @@ class EventApplierTaskTest {
         assertEquals(60 * 60_000L, dayTotal(t0))
     }
 
+    /**
+     * 运行中删除已绑定任务 → 结算:运行态还带着已删 id(删除只清库内引用),
+     * 落库必须丢弃它(整段归未绑定),而时间账照旧保留。
+     */
+    @Test fun settleWithDeletedTaskStoresUnbound() = runBlocking {
+        val a = graph.taskRepo.create("任务A", now = 1L)!!
+        val t0 = localMs(9)
+        val t1 = t0 + 60 * 60_000L
+        graph.taskRepo.deleteTask(a)
+
+        applier.apply(settle(t0, t1, taskId = a))
+
+        val rows = graph.totalsRepo.sessionsBetweenMs(t0, t1)
+        assertEquals(listOf(t0 to t1), rows.map { it.startAt to it.endAt })
+        assertNull(rows.single().taskId)
+        assertEquals(60 * 60_000L, dayTotal(t0))
+    }
+
+    /** 切点指向已删任务:那一段归未绑定,前一段仍保留自己的任务 id */
+    @Test fun settleWithDeletedTaskInCutStoresUnbound() = runBlocking {
+        val a = graph.taskRepo.create("任务A", now = 1L)!!
+        val b = graph.taskRepo.create("任务B", now = 2L)!!
+        val t0 = localMs(9)
+        val cut = t0 + 30 * 60_000L
+        val t1 = t0 + 60 * 60_000L
+        graph.taskRepo.deleteTask(b)
+
+        applier.apply(settle(t0, t1, taskId = b, cuts = "$cut,$a,$b"))
+
+        val rows = graph.totalsRepo.sessionsBetweenMs(t0, t1)
+        assertEquals(listOf(t0 to cut, cut to t1), rows.map { it.startAt to it.endAt })
+        assertEquals(listOf(a, null), rows.map { it.taskId })
+        assertEquals(60 * 60_000L, dayTotal(t0))
+    }
+
     /** TaskSwitched 在服务层是空效果:不落库、不动快照(切点由引擎记入快照并随结算事件下发) */
     @Test fun taskSwitchedWritesNothing() = runBlocking {
         val a = graph.taskRepo.create("任务A", now = 1L)!!
