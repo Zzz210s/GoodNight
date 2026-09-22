@@ -15,4 +15,9 @@ data class FocusSessionEntity(
     /** 墙钟(epoch ms),本地时区;startAt/endAt 恒同一天(切分后) */
     val startAt: Long,
     val endAt: Long,
+    /**
+     * v2.1 Task 1:该段绑定的任务(`task.id`),null = 未绑定。
+     * 旧库升级后既有段一律为 null;任务删除时由应用层事务置空(id 不留悬挂值)。
+     */
+    val taskId: Long? = null,
 )
