@@ -33,4 +33,24 @@ class RuntimeStateCodecTest {
         val m = RuntimeStateCodec.toMap(snap) + mapOf("unrelated" to "x")
         assertEquals(snap, RuntimeStateCodec.fromMap(m))
     }
+
+    /** v2.1:当前任务随运行态持久化(杀进程/重启后绑定仍在) */
+    @Test fun taskIdSurvivesRoundTrip() {
+        val bound = snap.copy(taskId = 42L)
+        assertEquals("42", RuntimeStateCodec.toMap(bound)["rt_task_id"])
+        assertEquals(bound, RuntimeStateCodec.fromMap(RuntimeStateCodec.toMap(bound)))
+        assertEquals(42L, RuntimeStateCodec.fromMap(RuntimeStateCodec.toMap(bound))!!.taskId)
+    }
+
+    /** 未绑定时不写键:既有会话快照序列化逐字节不变 */
+    @Test fun taskIdKeyOmittedWhenUnbound() {
+        assertTrue("rt_task_id" !in RuntimeStateCodec.toMap(snap))
+        assertNull(RuntimeStateCodec.fromMap(RuntimeStateCodec.toMap(snap))!!.taskId)
+    }
+
+    /** 旧库状态没有该键:解析为 null(未绑定),不崩 */
+    @Test fun legacyStateWithoutTaskIdDecodesToNull() {
+        val legacy = RuntimeStateCodec.toMap(snap) - "rt_task_id"
+        assertNull(RuntimeStateCodec.fromMap(legacy)!!.taskId)
+    }
 }

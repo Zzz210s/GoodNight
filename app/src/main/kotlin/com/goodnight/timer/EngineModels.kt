@@ -39,6 +39,11 @@ data class RuntimeSnapshot(
     val pauseStartWall: Long? = null,
     /** 已完成空档编码 "start,end;start,end"(紧凑;空串=无) */
     val pauseGaps: String = "",
+    /**
+     * v2.1:当前绑定的任务(未绑定 = null)。随运行态持久化(键 rt_task_id),杀进程/重启后
+     * 仍沿用恢复路径;阶段推进/重启跨周期保留,直到用户改动或整次会话结束(快照清空)。
+     */
+    val taskId: Long? = null,
 ) {
     /** 空档解析(事件与落段共用) */
     fun pauseWindows(): List<LongArray> = pauseGaps.split(';').mapNotNull { seg ->
@@ -91,6 +96,8 @@ sealed interface EngineEvent {
         val sessionStartWall: Long? = null, val sessionEndWall: Long? = null,
         /** v1.8.3:本工作段内的暂停窗口 [[start,end]](供 >5 分钟暂停分段展示) */
         val pauseWindows: List<LongArray> = emptyList(),
+        /** v2.1:本次收尾段归属的任务(自带 —— 事件发出与收集器处理之间快照可能已换值) */
+        val taskId: Long? = null,
     ) : EngineEvent
     /**
      * settleMillis = 待落库的工作增量(已扣除 checkpoint 游标);
@@ -101,6 +108,8 @@ sealed interface EngineEvent {
         val phase: Phase, val settleMillis: Long, val profileId: Long, val endElapsed: Long, val endWall: Long,
         val sessionStartWall: Long? = null, val sessionEndWall: Long? = null,
         val pauseWindows: List<LongArray> = emptyList(),
+        /** v2.1:被重启段的归属任务(restartPhase 不改任务,但快照可能已被后续 setTask 覆盖) */
+        val taskId: Long? = null,
     ) : EngineEvent
     data class Paused(val timeAtPause: Long) : EngineEvent
     data class Resumed(val endElapsed: Long, val endWall: Long) : EngineEvent
@@ -109,5 +118,13 @@ sealed interface EngineEvent {
         val settleMillis: Long, val profileId: Long,
         val sessionStartWall: Long? = null, val sessionEndWall: Long? = null,
         val pauseWindows: List<LongArray> = emptyList(),
+        /** v2.1:被终止段的归属任务(reset 后快照已清空,只能随事件携带) */
+        val taskId: Long? = null,
     ) : EngineEvent
+    /**
+     * v2.1 任务切换的段边界:atWall = 切换时刻(墙钟),fromTaskId = 切换前该段任务,
+     * toTaskId = 切换后新段任务(可为 null = 解绑)。仅 WORK + RUNNING 时发出 ——
+     * 服务层用它作为 taskCuts 的一项,把当前工作段按切换时刻切成两段(旧段归 from、新段归 to)。
+     */
+    data class TaskSwitched(val atWall: Long, val fromTaskId: Long?, val toTaskId: Long?) : EngineEvent
 }

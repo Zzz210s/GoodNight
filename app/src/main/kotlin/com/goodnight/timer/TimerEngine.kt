@@ -115,6 +115,20 @@ class TimerEngine(
         save()
     }
 
+    /**
+     * v2.1:绑定/解除当前任务(id 为 null = 未绑定)。任何状态都更新快照(随运行态持久化,
+     * 杀进程/重启后绑定仍在);是否发段边界出纯迁移 [bindTask] 决定 —— 仅 WORK + RUNNING
+     * 发 TaskSwitched(供服务层按 atWall 切段)。同值重复选择 / 无快照时 no-op。
+     */
+    fun setTask(taskId: Long?) {
+        val cur = _snapshot.value ?: return
+        if (cur.taskId == taskId) return
+        val (next, boundary) = cur.bindTask(taskId, wall, el)
+        _snapshot.value = next
+        save()
+        boundary?.let(::emit)
+    }
+
     fun onExpired() {
         val cur = _snapshot.value ?: return
         if (cur.status != EngineStatus.RUNNING) return
@@ -133,23 +147,17 @@ class TimerEngine(
         }
     }
 
-    /** 结算窗口:起点取快照持久化的 sessionStartWall(缺失则退化为"现在"),终点=现在 */
-    private fun takeWindowIfWork(cur: RuntimeSnapshot): Pair<Long?, Long?> {
-        if (cur.phase != Phase.WORK) return null to null
-        return (cur.sessionStartWall ?: wall) to wall
-    }
-
     fun reset() {
         val cur = _snapshot.value ?: return
         val settleAt = if (cur.status != EngineStatus.RUNNING) cur.lastPauseTime
             else if (cur.countUp) el else el.coerceAtMost(cur.endElapsed) // 正计时全额结算(可超 workMillis)
         val settle = cur.settleMillis(settleAt)
         val profileId = cur.profileId
-        val (sesStart, sesEnd) = takeWindowIfWork(cur)
+        val (sesStart, sesEnd) = cur.workWindow(wall)
         val gaps = if (cur.phase == Phase.WORK) cur.pauseWindows() else emptyList()
         _snapshot.value = null
         save()
-        emit(EngineEvent.Reset(settle, profileId, sesStart, sesEnd, gaps))
+        emit(EngineEvent.Reset(settle, profileId, sesStart, sesEnd, gaps, cur.taskId))
     }
 
     fun restartPhase(profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean = false) {
@@ -157,12 +165,12 @@ class TimerEngine(
         if (cur.status != EngineStatus.PAUSED) return
         val dur = if (countUp || cur.phase == Phase.WORK) workMillis else restMillis
         val e = el; val w = wall
-        val (sesStart, sesEnd) = takeWindowIfWork(cur)
+        val (sesStart, sesEnd) = cur.workWindow(w)
         val gaps = if (cur.phase == Phase.WORK) cur.pauseWindows() else emptyList()
         val next = if (countUp) Phase.WORK else cur.phase
         _snapshot.value = cur.toAdvancedSnapshot(profileId, workMillis, restMillis, next, EngineStatus.RUNNING, cur.cycleCount, e, dur, countUp, w)
         save()
-        emit(EngineEvent.PhaseRestarted(cur.phase, cur.settleMillis(cur.lastPauseTime), cur.profileId, e + dur, w + dur, sesStart, sesEnd, gaps))
+        emit(EngineEvent.PhaseRestarted(cur.phase, cur.settleMillis(cur.lastPauseTime), cur.profileId, e + dur, w + dur, sesStart, sesEnd, gaps, cur.taskId))
     }
 
     private fun finishAndAdvance(cur: RuntimeSnapshot, settleAtElapsed: Long, auto: Boolean) {
@@ -171,11 +179,11 @@ class TimerEngine(
         val cycle = if (next == Phase.WORK) cur.cycleCount + 1 else cur.cycleCount
         val dur = if (next == Phase.WORK) cur.workMillis else cur.restMillis
         val e = el; val w = wall
-        val (sesStart, sesEnd) = takeWindowIfWork(cur)
+        val (sesStart, sesEnd) = cur.workWindow(w)
         val gaps = if (cur.phase == Phase.WORK) cur.pauseWindows() else emptyList()
         _snapshot.value = cur.toAdvancedSnapshot(cur.profileId, cur.workMillis, cur.restMillis, next, EngineStatus.RUNNING, cycle, e, dur, cur.countUp, w)
         save()
-        emit(EngineEvent.PhaseFinished(cur.phase, settle, cur.profileId, next, auto, sesStart, sesEnd, gaps))
+        emit(EngineEvent.PhaseFinished(cur.phase, settle, cur.profileId, next, auto, sesStart, sesEnd, gaps, cur.taskId))
         emit(EngineEvent.PhaseStarted(next, e + dur, w + dur))
     }
 

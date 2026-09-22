@@ -58,6 +58,8 @@ object EventPolicy {
             add(EventEffect.CancelAlarm)
             settle(ev.settleMillis, ev.profileId)?.let(::add)
         }
+        // v2.1 任务切换只切段(EventApplier 缓冲切点),不改变闹钟与结算游标
+        is EngineEvent.TaskSwitched -> emptyList()
     }
 
     /** settle<=0 无落库意义,不产生效果(幂等性:空效果即零副作用) */
