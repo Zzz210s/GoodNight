@@ -56,6 +56,26 @@ class TaskCutPersistenceTest {
         assertEquals(listOf(42L, 42L), rows.map { it.taskId })
     }
 
+    /**
+     * Task 3 fix 要点:一次调用内各段分属不同任务 —— 前段保留基础 [taskId]、后段取 taskCuts 的 id。
+     * 断言**具体归属**,证明切点后的 id 落在正确的那一段(而非"每段都非空")。
+     */
+    @Test fun taskCutsBindEachSegmentToItsOwnTaskInDb() = runTest {
+        wipe()
+        val t0 = dayMs() + 9 * 3_600_000L
+        val cut = t0 + 30 * 60_000L
+        repo.recordWorkSessionSplit(
+            1L, t0, t0 + 60 * 60_000L, emptyList(),
+            taskId = 101L, taskCuts = listOf(cut to 202L), zone = zone,
+        )
+        val rows = repo.sessionsBetweenMs(t0, t0 + 60 * 60_000L)
+        assertEquals(
+            listOf(t0 to cut, cut to t0 + 60 * 60_000L),
+            rows.map { it.startAt to it.endAt },
+        )
+        assertEquals(listOf(101L, 202L), rows.map { it.taskId }) // 前段任务 A、后段任务 B
+    }
+
     @Test fun defaultParametersKeepLegacyPauseBehaviour() = runTest {
         wipe()
         val t0 = dayMs() + 14 * 3_600_000L

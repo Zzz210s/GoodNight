@@ -35,7 +35,14 @@ internal object SessionNormalizer {
         return changedDays
     }
 
-    /** 清洗某日:按配置合并段落,删除过短/可合并的旧行,插入合并后的行。返回是否发生改写。 */
+    /**
+     * 清洗某日:按配置合并段落,删除过短/可合并的旧行,插入合并后的行。返回是否发生改写。
+     *
+     * 警告(v2.1):本函数的重建路径([buildSessionRows] 调用)**不携带 `taskId` 维度** —— 重插的行
+     * 任务绑定为 null。当前调用链仅升级时一次性清洗旧数据(那时还没有任务绑定),所以不可达;
+     * 但 2.1 之后若要再启用清洗,必须先把每段自己的 `taskId` 按段保留(按 taskId 分组合并或逐段搬运),
+     * 否则会静默清空用户的任务绑定。不要顺手改成传单个 taskId —— 那是错语义。
+     */
     private suspend fun normalizeDay(
         db: GoodNightDatabase,
         sessionDao: FocusSessionDao,

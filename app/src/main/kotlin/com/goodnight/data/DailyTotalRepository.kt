@@ -69,7 +69,11 @@ class DailyTotalRepository(
      * 见 [mergeSessions]),因此 [minMs] 只需 <= 展示阈值即可覆盖所有需要留痕的暂停。
      *
      * v2.1 Task 3:[taskId]/[extraCuts] 只在 [mergeSessions] **之后**施加 —— 任务切点是相邻段,
-     * 若先切再合并会被合并规则(gap=0 <= 3 分钟)吞掉。两参数均有默认值,既有调用方零改动。
+     * 若先切再合并会被合并规则(gap=0 <= 3 分钟)吞掉。
+     * [taskCuts] 每项 = (切点墙钟 ms, 从该切点起那一段的 taskId),让**一次调用内各段分属不同任务**
+     * (Task 5 的 09:00-09:30 任务 A / 09:30-10:00 任务 B 场景);段归属规则见 [buildSessionRows]。
+     * 不要用"分两次调用各带一个 taskId"代替它 —— 单段不足 3 分钟会被最小跨度规则整段丢弃。
+     * 三参数均有默认值,既有调用方零改动。
      */
     suspend fun recordWorkSessionSplit(
         profileId: Long,
@@ -80,6 +84,7 @@ class DailyTotalRepository(
         zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
         taskId: Long? = null,
         extraCuts: List<Long> = emptyList(),
+        taskCuts: List<Pair<Long, Long?>> = emptyList(),
     ) {
         val cur = startAt
         val segs = mutableListOf<Pair<Long, Long>>()
@@ -92,7 +97,7 @@ class DailyTotalRepository(
         // v1.11.1:数据层规则 —— 间隔 <=3 分钟合并、合并后 <3 分钟的段落不落库(与展示同源)
         val rows = ArrayList<com.goodnight.data.db.FocusSessionEntity>()
         mergeSessions(segs).forEach { (st, en) ->
-            val r = buildSessionRows(profileId, st, en, zone, taskId, extraCuts)
+            val r = buildSessionRows(profileId, st, en, zone, taskId, extraCuts, taskCuts)
             if (r.isNotEmpty()) { sessionDao.insertAll(r); rows += r }
         }
         // v1.10.8:当日合计改为"由段落派生"—— 与每日详情显示的时间段完全一致(而不是另算一份)

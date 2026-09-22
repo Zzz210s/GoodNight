@@ -88,4 +88,46 @@ class SessionSplitterTest {
         // 默认参数:既有调用方零改动,taskId 为 null
         assertEquals(listOf<Long?>(null), buildSessionRows(1L, 1000, 5000, zone).map { it.taskId })
     }
+
+    // ---- v2.1 Task 3 fix:taskCuts 让一次调用内各段分属不同任务 ----
+
+    /** 09:00-10:00、09:30 从任务 A 切到任务 B → 前段 A、后段 B(断言具体归属,不是"都有值") */
+    @Test fun taskCutsBindEachSegmentToItsOwnTask() {
+        val s = ms(2026, 9, 22, 9, 0)
+        val cut = ms(2026, 9, 22, 9, 30)
+        val rows = buildSessionRows(7L, s, ms(2026, 9, 22, 10, 0), zone,
+            taskId = 1L, taskCuts = listOf(cut to 2L))
+        assertEquals(listOf(s to cut, cut to ms(2026, 9, 22, 10, 0)), rows.map { it.startAt to it.endAt })
+        assertEquals(listOf(1L, 2L), rows.map { it.taskId })
+    }
+
+    /** 唯一 taskCuts 项在窗口起点之前:切点不产生边界(开区间外),但 id 延续到整窗 */
+    @Test fun taskCutBeforeWindowStartBindsWholeWindow() {
+        val s = ms(2026, 9, 22, 9, 0)
+        val rows = buildSessionRows(7L, s, s + 600_000L, zone, taskId = 1L,
+            taskCuts = listOf((s - 300_000L) to 2L))
+        assertEquals(listOf(s to s + 600_000L), rows.map { it.startAt to it.endAt })
+        assertEquals(listOf(2L), rows.map { it.taskId })
+    }
+
+    /** 切点正好落在段起点:不产生零长段,但归属从第一段就生效(<= 起点即命中) */
+    @Test fun taskCutAtWindowStartBindsFromFirstSegment() {
+        val s = ms(2026, 9, 22, 9, 0)
+        val rows = buildSessionRows(7L, s, s + 600_000L, zone, taskId = 1L, taskCuts = listOf(s to 3L))
+        assertEquals(listOf(3L), rows.map { it.taskId })
+    }
+
+    /** 显式 null = 从此段起未绑定,不回退到参数 taskId */
+    @Test fun explicitNullTaskCutClearsBindingInsteadOfFallingBack() {
+        val rows = buildSessionRows(7L, 1000L, 5000L, zone, taskId = 1L, taskCuts = listOf(1000L to null))
+        assertEquals(listOf<Long?>(null), rows.map { it.taskId })
+    }
+
+    /** extraCuts 与 taskCuts 同时传:合并成一条边界列表,归属只看 taskCuts */
+    @Test fun extraCutsAndTaskCutsShareOneBoundaryList() {
+        val rows = buildSessionRows(7L, 1000L, 5000L, zone, taskId = 1L,
+            extraCuts = listOf(2000L), taskCuts = listOf(4000L to 2L))
+        assertEquals(listOf(1000L to 2000L, 2000L to 4000L, 4000L to 5000L), rows.map { it.startAt to it.endAt })
+        assertEquals(listOf(1L, 1L, 2L), rows.map { it.taskId })
+    }
 }
