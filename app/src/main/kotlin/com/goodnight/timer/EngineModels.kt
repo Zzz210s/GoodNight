@@ -44,7 +44,22 @@ data class RuntimeSnapshot(
      * 仍沿用恢复路径;阶段推进/重启跨周期保留,直到用户改动或整次会话结束(快照清空)。
      */
     val taskId: Long? = null,
+    /**
+     * v2.1:本工作段内已发生的任务切换切点,编码 "atWall,fromTaskId,toTaskId;..."(空字段 = null;
+     * 空串 = 无切点)。比照 [pauseGaps] 随快照持久化(键 rt_task_cuts):切点原本只活在内存事件
+     * 缓冲里,而工作段跨重启存活 —— 不持久化则杀进程/重启后,重启前那段工作会被归到重启后的任务。
+     * 切点只对本工作段有效,阶段推进(进入新工作段)时清空。
+     */
+    val taskCuts: String = "",
 ) {
+    /** 切点解析(事件与落段共用):每项 = (切点墙钟, 切换前任务, 切换后任务) */
+    fun taskCutPoints(): List<Triple<Long, Long?, Long?>> = taskCuts.split(';').mapNotNull { seg ->
+        val parts = seg.split(',')
+        if (parts.size != 3) return@mapNotNull null
+        val at = parts[0].toLongOrNull() ?: return@mapNotNull null
+        Triple(at, parts[1].toLongOrNull(), parts[2].toLongOrNull())
+    }
+
     /** 空档解析(事件与落段共用) */
     fun pauseWindows(): List<LongArray> = pauseGaps.split(';').mapNotNull { seg ->
         val parts = seg.split(',')
@@ -96,7 +111,11 @@ sealed interface EngineEvent {
         val sessionStartWall: Long? = null, val sessionEndWall: Long? = null,
         /** v1.8.3:本工作段内的暂停窗口 [[start,end]](供 >5 分钟暂停分段展示) */
         val pauseWindows: List<LongArray> = emptyList(),
-        /** v2.1:本次收尾段归属的任务(自带 —— 事件发出与收集器处理之间快照可能已换值) */
+        /**
+         * v2.1:本次收尾段的任务 = 事件发出时刻快照的当前绑定 = 段内**最后一个**子段的任务
+         * (自带 —— 事件发出与收集器处理之间快照可能已换值)。**整段的段首任务不能取本字段**:
+         * 段内有切点时,段首任务必须取段内最早切点的 `fromTaskId`;段内无切点时本字段才等于段首任务。
+         */
         val taskId: Long? = null,
     ) : EngineEvent
     /**
@@ -122,9 +141,12 @@ sealed interface EngineEvent {
         val taskId: Long? = null,
     ) : EngineEvent
     /**
-     * v2.1 任务切换的段边界:atWall = 切换时刻(墙钟),fromTaskId = 切换前该段任务,
-     * toTaskId = 切换后新段任务(可为 null = 解绑)。仅 WORK + RUNNING 时发出 ——
-     * 服务层用它作为 taskCuts 的一项,把当前工作段按切换时刻切成两段(旧段归 from、新段归 to)。
+     * v2.1 任务切换的段边界:atWall = **该次连续工作停止的时刻**(一次连续工作只属一个任务),
+     * fromTaskId = 切换前该段任务,toTaskId = 切换后新段任务(可为 null = 解绑)。
+     * 工作段内发出,边界时刻按状态取:WORK + RUNNING 用当前墙钟;WORK + PAUSED 用暂停起点
+     * (暂停前那段仍属旧任务,不能算到新任务头上);休息段不落时间账,只改快照不发事件。
+     * 事件与快照的 [RuntimeSnapshot.taskCuts] 同步记录同一切点(后者持久化,重启不丢)。
+     * 本任务只负责发出;消费(切段落库)在 Task 5 的服务层。
      */
     data class TaskSwitched(val atWall: Long, val fromTaskId: Long?, val toTaskId: Long?) : EngineEvent
 }

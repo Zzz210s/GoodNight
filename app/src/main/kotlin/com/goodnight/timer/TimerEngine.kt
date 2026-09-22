@@ -117,8 +117,9 @@ class TimerEngine(
 
     /**
      * v2.1:绑定/解除当前任务(id 为 null = 未绑定)。任何状态都更新快照(随运行态持久化,
-     * 杀进程/重启后绑定仍在);是否发段边界出纯迁移 [bindTask] 决定 —— 仅 WORK + RUNNING
-     * 发 TaskSwitched(供服务层按 atWall 切段)。同值重复选择 / 无快照时 no-op。
+     * 杀进程/重启后绑定仍在);是否发段边界由纯迁移 [bindTask] 决定 —— 工作段内发
+     * TaskSwitched(RUNNING 用当前墙钟,PAUSED 用暂停起点),休息段只改快照。
+     * 同值重复选择 / 无快照时 no-op。切点随快照持久化(rt_task_cuts),消费在 Task 5。
      */
     fun setTask(taskId: Long?) {
         val cur = _snapshot.value ?: return

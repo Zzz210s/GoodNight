@@ -9,9 +9,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * v2.1 任务绑定:引擎携带当前任务,运行中切换任务发出段边界事件(供服务层按 atWall 切段)。
- * 契约:任何状态都更新快照(随运行态持久化);仅 WORK + RUNNING 发 TaskSwitched;
- * 结算类事件(自动完成/跳过/终止/重启)自带该段的 taskId(快照事后可能已变或被清空)。
+ * v2.1 任务绑定:引擎携带当前任务,工作段内切换任务发出段边界事件(供服务层按 atWall 切段)。
+ * 契约:任何状态都更新快照(随运行态持久化);WORK + RUNNING 用当前墙钟、WORK + PAUSED 用
+ * 暂停起点发 TaskSwitched(休息段不发);结算类事件(自动完成/跳过/终止/重启)自带该段的 taskId。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimerEngineTaskTest {
@@ -66,17 +66,19 @@ class TimerEngineTaskTest {
         assertEquals(7L, e.snapshot.value!!.taskId)
     }
 
-    /** 暂停中切换:只改快照,不发边界(边界仅属于 RUNNING 中的工作段) */
-    @Test fun switchingWhilePausedOnlyUpdatesSnapshot() = runTest {
+    /** 暂停中切换:发边界,但时刻回退到暂停起点(暂停前那段仍属旧任务,详见 TimerEngineTaskCutTest) */
+    @Test fun switchingWhilePausedEmitsBoundaryAtPauseStart() = runTest {
         val t = FakeTime()
         val e = testEngine(t)
         e.restore(null)
         e.start(1, 60_000L, 30_000L)
         t.el += 20_000; t.nowMs += 20_000
+        val pauseStart = t.nowMs
         e.pause()
         val seen = recordEvents(e)
+        t.el += 5_000; t.nowMs += 5_000
         e.setTask(9L)
-        assertTrue(switches(seen).isEmpty())
+        assertEquals(pauseStart, switches(seen).single().atWall)
         assertEquals(9L, e.snapshot.value!!.taskId)
     }
 

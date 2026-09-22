@@ -28,6 +28,8 @@ internal fun RuntimeSnapshot.toAdvancedSnapshot(
     // v1.12.1:进入 WORK 开启新窗口,进入 REST/结束清空(窗口随快照持久化)
     sessionStartWall = if (phase == Phase.WORK) wall else null,
     pauseStartWall = null, pauseGaps = "",
+    // v2.1:切点只对本工作段有效 —— 新段重开窗口,旧切点不得残留(残留会把新段段首误归旧任务)
+    taskCuts = "",
 )
 
 /** 工作阶段应落库增量 = 已流逝 - 已 flush 游标(仅 WORK) */
@@ -39,20 +41,35 @@ internal fun RuntimeSnapshot.workWindow(wall: Long): Pair<Long?, Long?> =
     if (phase == Phase.WORK) (sessionStartWall ?: wall) to wall else null to null
 
 /**
- * v2.1 任务绑定的纯迁移:返回新快照(刷新 savedAt 与 taskId)与应发的段边界事件。
+ * v2.1 任务绑定的纯迁移:返回新快照(刷新 savedAt、taskId,并追加切点)与应发的段边界事件。
  *
- * 绑定事件只在 **WORK + RUNNING** 时产生 —— 那是唯一“时间账正在按任务切分”的状态:
- * 暂停/休息中切换只改快照(那段时间账仍属旧任务,归属由下一次结算事件自带的 taskId 定);
- * 无边界时返回 null(同值重复选择也走不到这里,调用方已早早退出)。
+ * 边界时刻取**该次连续工作停止的时刻**(一次连续工作只属一个任务):
+ * - WORK + RUNNING:atWall(当前墙钟)—— 时间账正在按任务切分;
+ * - WORK + PAUSED:pauseStartWall ?: atWall —— 暂停中的切换,暂停前那段工作仍属旧任务,
+ *   边界必须回退到暂停起点,否则那段时间账会被整段记到新任务;
+ * - 其它状态(休息段、IDLE):只改快照不发事件(不落时间账,无段可切)。
+ * 发事件时把同一切点编进快照的 [RuntimeSnapshot.taskCuts](随运行态持久化,重启不丢)。
+ * 同值重复选择由调用方早早退出,到不了这里。
  */
 internal fun RuntimeSnapshot.bindTask(
     taskId: Long?,
     atWall: Long,
     atElapsed: Long,
 ): Pair<RuntimeSnapshot, EngineEvent.TaskSwitched?> {
-    val next = copy(taskId = taskId, savedAtWall = atWall, savedAtElapsed = atElapsed)
-    val boundary = if (phase == Phase.WORK && status == EngineStatus.RUNNING) {
-        EngineEvent.TaskSwitched(atWall, this.taskId, taskId)
-    } else null
+    val boundaryAt = when {
+        phase != Phase.WORK -> null
+        status == EngineStatus.RUNNING -> atWall
+        status == EngineStatus.PAUSED -> pauseStartWall ?: atWall
+        else -> null
+    }
+    val next = copy(
+        taskId = taskId, savedAtWall = atWall, savedAtElapsed = atElapsed,
+        taskCuts = boundaryAt?.let { encodeTaskCut(taskCuts, it, this.taskId, taskId) } ?: taskCuts,
+    )
+    val boundary = boundaryAt?.let { EngineEvent.TaskSwitched(it, this.taskId, taskId) }
     return next to boundary
 }
+
+/** 追加一项任务切点(编码 "atWall,from,to",空字段 = null);返回新编码,空串 = 无切点 */
+internal fun encodeTaskCut(prev: String, atWall: Long, from: Long?, to: Long?): String =
+    (if (prev.isEmpty()) "" else "$prev;") + "$atWall,${from ?: ""},${to ?: ""}"
