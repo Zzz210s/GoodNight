@@ -1,0 +1,82 @@
+package com.goodnight.timer
+
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * v2.1 段首绑定:start() 不接收任务,任务 id 要等异步读库后才 setTask。这类「给本段定任务」
+ * 的绑定不是段内切换 —— 只改快照、不落切点、不发边界事件。否则切点会落进
+ * (sessionStartWall, end) 开区间,下游 buildSessionRows 多产出一段归属为 null 的毫秒级行。
+ * 段首归属由段首 taskId 与段内切点表共同表达:段内有切点时,段首 = 最早切点的 fromTaskId。
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class TimerEngineTaskHeadBindTest {
+    private fun switches(seen: List<EngineEvent>) = seen.filterIsInstance<EngineEvent.TaskSwitched>()
+
+    /** start() 与 setTask() 相隔 1ms(任务 id 异步读库后才下发):不发边界、不落切点、快照已绑定 */
+    @Test fun oneMillisecondAfterStartEmitsNoBoundary() = runTest {
+        val t = FakeTime()
+        val saved = mutableListOf<RuntimeSnapshot?>()
+        val e = testEngine(t, saved)
+        e.restore(null)
+        e.start(1, 60_000L, 30_000L)
+        val seen = recordEvents(e)
+        t.el += 1; t.nowMs += 1
+        e.setTask(7L)
+        advanceUntilIdle()
+        assertTrue("段首绑定不得发边界事件,实际 $seen", switches(seen).isEmpty())
+        assertEquals(7L, e.snapshot.value!!.taskId)
+        assertTrue(
+            "段首绑定不落切点(整段归 7,由结算事件 taskId 承载)",
+            e.snapshot.value!!.taskCutPoints().isEmpty(),
+        )
+        assertEquals(7L, saved.last()!!.taskId)
+    }
+
+    /** 同一毫秒会话起点绑定(sessionStartWall == atWall)同样是段首绑定,当然也不切 */
+    @Test fun sameMillisecondHeadBindEmitsNoBoundary() = runTest {
+        val t = FakeTime()
+        val e = testEngine(t)
+        e.restore(null)
+        e.start(1, 60_000L, 30_000L)
+        val seen = recordEvents(e)
+        e.setTask(7L)
+        assertTrue("段首绑定不得发边界事件,实际 $seen", switches(seen).isEmpty())
+        assertTrue(e.snapshot.value!!.taskCutPoints().isEmpty())
+    }
+
+    /** 段首绑定的任务成为段内首个切点的 fromTaskId —— Task 5 据此复原段首归属 */
+    @Test fun laterSwitchCutsFromHeadBoundTask() = runTest {
+        val t = FakeTime()
+        val e = testEngine(t)
+        e.restore(null)
+        e.start(1, 60_000L, 30_000L)
+        e.setTask(5L) // 段首绑定
+        t.el += 10_000; t.nowMs += 10_000
+        val seen = recordEvents(e)
+        e.setTask(7L)
+        val cutWall = t.nowMs
+        assertEquals(5L, switches(seen).single().fromTaskId)
+        assertEquals(listOf(Triple(cutWall, 5L, 7L)), e.snapshot.value!!.taskCutPoints())
+    }
+
+    /** 段首绑定后正计时同样切段:正计时与倒计时的切段语义一致 */
+    @Test fun countUpSwitchAfterHeadBindEmitsBoundary() = runTest {
+        val t = FakeTime()
+        val e = testEngine(t)
+        e.restore(null)
+        e.start(1, 60_000L, 30_000L, countUp = true)
+        e.setTask(5L) // 段首绑定:只改快照
+        t.el += 10_000; t.nowMs += 10_000
+        val seen = recordEvents(e)
+        e.setTask(7L)
+        val ev = switches(seen).single()
+        assertEquals(1_010_000L, ev.atWall)
+        assertEquals(5L, ev.fromTaskId)
+        assertEquals(7L, e.snapshot.value!!.taskId)
+    }
+}

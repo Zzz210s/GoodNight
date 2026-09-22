@@ -53,12 +53,7 @@ data class RuntimeSnapshot(
     val taskCuts: String = "",
 ) {
     /** 切点解析(事件与落段共用):每项 = (切点墙钟, 切换前任务, 切换后任务) */
-    fun taskCutPoints(): List<Triple<Long, Long?, Long?>> = taskCuts.split(';').mapNotNull { seg ->
-        val parts = seg.split(',')
-        if (parts.size != 3) return@mapNotNull null
-        val at = parts[0].toLongOrNull() ?: return@mapNotNull null
-        Triple(at, parts[1].toLongOrNull(), parts[2].toLongOrNull())
-    }
+    fun taskCutPoints(): List<Triple<Long, Long?, Long?>> = parseTaskCuts(taskCuts)
 
     /** 空档解析(事件与落段共用) */
     fun pauseWindows(): List<LongArray> = pauseGaps.split(';').mapNotNull { seg ->
@@ -96,6 +91,18 @@ data class RuntimeSnapshot(
         if (countUp) raw.coerceAtLeast(0) else raw.coerceIn(0, workMillis)
 }
 
+/**
+ * 解析任务切点编码(快照 [RuntimeSnapshot.taskCuts] 与结算事件的 `taskCuts` 同一形式):
+ * 每项 = (切点墙钟 ms, 切换前任务, 切换后任务),空字段 = null,无法解析的片段丢弃。
+ * 供 Task 5 直接从结算事件取本段切点(事件在快照被推进/清空之前捕获,故不必自建内存缓冲)。
+ */
+fun parseTaskCuts(encoded: String): List<Triple<Long, Long?, Long?>> = encoded.split(';').mapNotNull { seg ->
+    val parts = seg.split(',')
+    if (parts.size != 3) return@mapNotNull null
+    val at = parts[0].toLongOrNull() ?: return@mapNotNull null
+    Triple(at, parts[1].toLongOrNull(), parts[2].toLongOrNull())
+}
+
 sealed interface EngineEvent {
     data class PhaseStarted(val phase: Phase, val endElapsed: Long, val endWall: Long) : EngineEvent
     /**
@@ -117,6 +124,13 @@ sealed interface EngineEvent {
          * 段内有切点时,段首任务必须取段内最早切点的 `fromTaskId`;段内无切点时本字段才等于段首任务。
          */
         val taskId: Long? = null,
+        /**
+         * v2.1:本段的任务切点表,编码与快照 [RuntimeSnapshot.taskCuts] 完全一致
+         * (`atWall,fromTaskId,toTaskId;...`,空字段 = null;空串 = 无切点)。
+         * 必须随事件携带:快照在事件发出前已被推进到下一阶段并清空切点,结算时刻读快照
+         * 只会拿到新段的空表,Task 5 因此拿不到本段切点。
+         */
+        val taskCuts: String = "",
     ) : EngineEvent
     /**
      * settleMillis = 待落库的工作增量(已扣除 checkpoint 游标);
@@ -127,8 +141,14 @@ sealed interface EngineEvent {
         val phase: Phase, val settleMillis: Long, val profileId: Long, val endElapsed: Long, val endWall: Long,
         val sessionStartWall: Long? = null, val sessionEndWall: Long? = null,
         val pauseWindows: List<LongArray> = emptyList(),
-        /** v2.1:被重启段的归属任务(restartPhase 不改任务,但快照可能已被后续 setTask 覆盖) */
+        /**
+         * v2.1:被重启段在事件发出时刻快照的当前绑定 = 段内**末子段**的任务(快照可能已被后续 setTask 覆盖)。
+         * **整段的段首归属不能取本字段**:段内有切点时须取本段切点表中最早切点的 `fromTaskId`;
+         * 段内无切点时本字段才等于段首任务。
+         */
         val taskId: Long? = null,
+        /** v2.1:被重启段的切点表(编码同快照的 [RuntimeSnapshot.taskCuts];新段快照已清空,故必须随事件携带) */
+        val taskCuts: String = "",
     ) : EngineEvent
     data class Paused(val timeAtPause: Long) : EngineEvent
     data class Resumed(val endElapsed: Long, val endWall: Long) : EngineEvent
@@ -137,8 +157,14 @@ sealed interface EngineEvent {
         val settleMillis: Long, val profileId: Long,
         val sessionStartWall: Long? = null, val sessionEndWall: Long? = null,
         val pauseWindows: List<LongArray> = emptyList(),
-        /** v2.1:被终止段的归属任务(reset 后快照已清空,只能随事件携带) */
+        /**
+         * v2.1:被终止段在事件发出时刻快照的当前绑定 = 段内**末子段**的任务(reset 后快照已清空,只能随事件携带)。
+         * **整段的段首归属不能取本字段**:段内有切点时须取本段切点表中最早切点的 `fromTaskId`;
+         * 段内无切点时本字段才等于段首任务。
+         */
         val taskId: Long? = null,
+        /** v2.1:被终止段的切点表(编码同快照的 [RuntimeSnapshot.taskCuts];reset 后快照已清空,故必须随事件携带) */
+        val taskCuts: String = "",
     ) : EngineEvent
     /**
      * v2.1 任务切换的段边界:atWall = **该次连续工作停止的时刻**(一次连续工作只属一个任务),

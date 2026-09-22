@@ -47,7 +47,7 @@ internal fun RuntimeSnapshot.workWindow(wall: Long): Pair<Long?, Long?> =
  * - WORK + RUNNING:atWall(当前墙钟)—— 时间账正在按任务切分;
  * - WORK + PAUSED:pauseStartWall ?: atWall —— 暂停中的切换,暂停前那段工作仍属旧任务,
  *   边界必须回退到暂停起点,否则那段时间账会被整段记到新任务;
- * - 其它状态(休息段、IDLE):只改快照不发事件(不落时间账,无段可切)。
+ * - 段首绑定([isHeadTaskBinding])与其它状态(休息段、IDLE):只改快照不发事件。
  * 发事件时把同一切点编进快照的 [RuntimeSnapshot.taskCuts](随运行态持久化,重启不丢)。
  * 同值重复选择由调用方早早退出,到不了这里。
  */
@@ -57,6 +57,7 @@ internal fun RuntimeSnapshot.bindTask(
     atElapsed: Long,
 ): Pair<RuntimeSnapshot, EngineEvent.TaskSwitched?> {
     val boundaryAt = when {
+        isHeadTaskBinding() -> null
         phase != Phase.WORK -> null
         status == EngineStatus.RUNNING -> atWall
         status == EngineStatus.PAUSED -> pauseStartWall ?: atWall
@@ -69,6 +70,18 @@ internal fun RuntimeSnapshot.bindTask(
     val boundary = boundaryAt?.let { EngineEvent.TaskSwitched(it, this.taskId, taskId) }
     return next to boundary
 }
+
+/**
+ * 段首绑定判据:此刻 setTask 是「给本段定任务」而不是「段内切换」,只改快照、不发边界事件。
+ * 判据 = WORK + RUNNING 且本段尚无任务历史(未绑定、无切点)。
+ * 它同时覆盖 `sessionStartWall == atWall` 的零长情形,并消除其相邻的「毫秒级首绑」:
+ * start() 与随后的 setTask() 只要相差 >=1ms(任务 id 异步读库后才下发),切点就会落进
+ * (sessionStartWall, end) 开区间,buildSessionRows 会多产出一段时长 = 该间隔、归属回退为
+ * null 的行,且下游没有长度过滤 —— 必须在源头(不产生切点)消除,而不是靠端点过滤兜住。
+ * 此时快照的 taskId 即本段归属,结算事件的 taskId/taskCuts 足以让 Task 5 复原整段。
+ */
+internal fun RuntimeSnapshot.isHeadTaskBinding(): Boolean =
+    phase == Phase.WORK && status == EngineStatus.RUNNING && taskId == null && taskCuts.isEmpty()
 
 /** 追加一项任务切点(编码 "atWall,from,to",空字段 = null);返回新编码,空串 = 无切点 */
 internal fun encodeTaskCut(prev: String, atWall: Long, from: Long?, to: Long?): String =

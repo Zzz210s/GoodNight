@@ -10,8 +10,9 @@ import org.junit.Test
 
 /**
  * v2.1 任务绑定:引擎携带当前任务,工作段内切换任务发出段边界事件(供服务层按 atWall 切段)。
- * 契约:任何状态都更新快照(随运行态持久化);WORK + RUNNING 用当前墙钟、WORK + PAUSED 用
- * 暂停起点发 TaskSwitched(休息段不发);结算类事件(自动完成/跳过/终止/重启)自带该段的 taskId。
+ * 契约:任何状态都更新快照(随运行态持久化);段首绑定(本段尚无任务)与休息段不发事件,
+ * WORK + RUNNING 用当前墙钟、WORK + PAUSED 用暂停起点发 TaskSwitched;
+ * 结算类事件(自动完成/跳过/终止/重启)自带该段的 taskId 与本段切点表 taskCuts。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimerEngineTaskTest {
@@ -23,14 +24,15 @@ class TimerEngineTaskTest {
         val saved = mutableListOf<RuntimeSnapshot?>()
         val e = testEngine(t, saved)
         e.restore(null)
-        val seen = recordEvents(e)
         e.start(1, 60_000L, 30_000L)
+        e.setTask(5L) // 段首绑定:只改快照,不发事件
         t.el += 10_000; t.nowMs += 10_000 // 墙钟 1_010_000
+        val seen = recordEvents(e)
         e.setTask(7L)
         advanceUntilIdle()
         val ev = switches(seen).single()
         assertEquals(1_010_000L, ev.atWall)
-        assertNull(ev.fromTaskId)
+        assertEquals(5L, ev.fromTaskId)
         assertEquals(7L, ev.toTaskId)
         assertEquals(7L, e.snapshot.value!!.taskId)
         assertEquals(7L, saved.last()!!.taskId)
@@ -171,19 +173,6 @@ class TimerEngineTaskTest {
         e.restartPhase(1L, 60_000L, 30_000L)
         val pr = seen.filterIsInstance<EngineEvent.PhaseRestarted>().single()
         assertEquals(7L, pr.taskId)
-        assertEquals(7L, e.snapshot.value!!.taskId)
-    }
-
-    /** 正计时(WORK+RUNNING)切换任务同样发边界:切段语义与倒计时一致 */
-    @Test fun switchingWhileCountUpEmitsBoundary() = runTest {
-        val t = FakeTime()
-        val e = testEngine(t)
-        e.restore(null)
-        e.start(1, 60_000L, 30_000L, countUp = true)
-        t.el += 10_000; t.nowMs += 10_000
-        val seen = recordEvents(e)
-        e.setTask(7L)
-        assertEquals(1_010_000L, switches(seen).single().atWall)
         assertEquals(7L, e.snapshot.value!!.taskId)
     }
 }

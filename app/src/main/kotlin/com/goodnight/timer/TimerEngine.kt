@@ -117,8 +117,8 @@ class TimerEngine(
 
     /**
      * v2.1:绑定/解除当前任务(id 为 null = 未绑定)。任何状态都更新快照(随运行态持久化,
-     * 杀进程/重启后绑定仍在);是否发段边界由纯迁移 [bindTask] 决定 —— 工作段内发
-     * TaskSwitched(RUNNING 用当前墙钟,PAUSED 用暂停起点),休息段只改快照。
+     * 杀进程/重启后绑定仍在);是否发段边界由纯迁移 [bindTask] 决定 —— 段首绑定
+     * (本段尚无任务历史)与休息段只改快照,工作段内的真切换才发 TaskSwitched。
      * 同值重复选择 / 无快照时 no-op。切点随快照持久化(rt_task_cuts),消费在 Task 5。
      */
     fun setTask(taskId: Long?) {
@@ -158,7 +158,7 @@ class TimerEngine(
         val gaps = if (cur.phase == Phase.WORK) cur.pauseWindows() else emptyList()
         _snapshot.value = null
         save()
-        emit(EngineEvent.Reset(settle, profileId, sesStart, sesEnd, gaps, cur.taskId))
+        emit(EngineEvent.Reset(settle, profileId, sesStart, sesEnd, gaps, cur.taskId, cur.taskCuts))
     }
 
     fun restartPhase(profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean = false) {
@@ -171,7 +171,7 @@ class TimerEngine(
         val next = if (countUp) Phase.WORK else cur.phase
         _snapshot.value = cur.toAdvancedSnapshot(profileId, workMillis, restMillis, next, EngineStatus.RUNNING, cur.cycleCount, e, dur, countUp, w)
         save()
-        emit(EngineEvent.PhaseRestarted(cur.phase, cur.settleMillis(cur.lastPauseTime), cur.profileId, e + dur, w + dur, sesStart, sesEnd, gaps, cur.taskId))
+        emit(EngineEvent.PhaseRestarted(cur.phase, cur.settleMillis(cur.lastPauseTime), cur.profileId, e + dur, w + dur, sesStart, sesEnd, gaps, cur.taskId, cur.taskCuts))
     }
 
     private fun finishAndAdvance(cur: RuntimeSnapshot, settleAtElapsed: Long, auto: Boolean) {
@@ -184,7 +184,7 @@ class TimerEngine(
         val gaps = if (cur.phase == Phase.WORK) cur.pauseWindows() else emptyList()
         _snapshot.value = cur.toAdvancedSnapshot(cur.profileId, cur.workMillis, cur.restMillis, next, EngineStatus.RUNNING, cycle, e, dur, cur.countUp, w)
         save()
-        emit(EngineEvent.PhaseFinished(cur.phase, settle, cur.profileId, next, auto, sesStart, sesEnd, gaps, cur.taskId))
+        emit(EngineEvent.PhaseFinished(cur.phase, settle, cur.profileId, next, auto, sesStart, sesEnd, gaps, cur.taskId, cur.taskCuts))
         emit(EngineEvent.PhaseStarted(next, e + dur, w + dur))
     }
 
