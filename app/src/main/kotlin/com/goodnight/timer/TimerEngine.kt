@@ -117,8 +117,9 @@ class TimerEngine(
 
     /**
      * v2.1:绑定/解除当前任务(id 为 null = 未绑定)。任何状态都更新快照(随运行态持久化,
-     * 杀进程/重启后绑定仍在);是否发段边界由纯迁移 [bindTask] 决定 —— 段首绑定
-     * (本段尚无任务历史)与休息段只改快照,工作段内的真切换才发 TaskSwitched。
+     * 杀进程/重启后绑定仍在);是否发段边界由纯迁移 [bindTask] 决定 —— 首次绑定
+     * (本段尚无任务历史,RUNNING 与 PAUSED 一致)与休息段只改快照,
+     * 工作段内的真切换才发 TaskSwitched。
      * 同值重复选择 / 无快照时 no-op。切点随快照持久化(rt_task_cuts),消费在 Task 5。
      */
     fun setTask(taskId: Long?) {
