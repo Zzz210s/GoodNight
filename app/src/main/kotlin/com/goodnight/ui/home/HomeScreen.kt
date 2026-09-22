@@ -47,7 +47,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeScreen(onSettings: () -> Unit, onOpenReport: (ReportRange) -> Unit, onManageProfiles: () -> Unit) {
+fun HomeScreen(
+    onSettings: () -> Unit,
+    onOpenReport: (ReportRange) -> Unit,
+    onManageProfiles: () -> Unit,
+    onManageTasks: () -> Unit,
+) {
     val app = LocalContext.current.applicationContext as GoodNightApp
     val vm: HomeViewModel = viewModel(factory = app.graph.vmFactory)
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -101,6 +106,7 @@ fun HomeScreen(onSettings: () -> Unit, onOpenReport: (ReportRange) -> Unit, onMa
             },
             onSettings = onSettings,
             onManageProfiles = onManageProfiles,
+            onManageTasks = onManageTasks,
             onOpenReport = onOpenReport,
         )
         Column(

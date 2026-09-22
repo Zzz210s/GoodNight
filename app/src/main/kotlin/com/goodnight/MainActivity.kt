@@ -22,6 +22,7 @@ import com.goodnight.ui.report.ReportRange
 import com.goodnight.ui.report.ReportScreen
 import com.goodnight.ui.settings.ProfilesScreen
 import com.goodnight.ui.settings.SettingsScreen
+import com.goodnight.ui.tasks.TaskScreen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,8 +38,8 @@ import com.goodnight.ui.theme.MotionTokens
 import com.goodnight.ui.theme.rememberAnimationsEnabled
 import com.goodnight.ui.theme.EmberTheme
 
-/** 无导航库:三屏手写状态切换(主页/设置/报表,rememberSaveable 存 Int 序数) */
-private enum class Screen { HOME, SETTINGS, REPORT, PROFILES }
+/** 无导航库:五屏手写状态切换(主页/设置/报表/时钟管理/任务,rememberSaveable 存 Int 序数) */
+private enum class Screen { HOME, SETTINGS, REPORT, PROFILES, TASKS }
 
 class MainActivity : ComponentActivity() {
     private val notifPermission =
@@ -107,11 +108,15 @@ class MainActivity : ComponentActivity() {
                             onSettings = { screenOrdinal = Screen.SETTINGS.ordinal },
                             onOpenReport = openReport,
                             onManageProfiles = { screenOrdinal = Screen.PROFILES.ordinal },
+                            onManageTasks = { screenOrdinal = Screen.TASKS.ordinal },
                         )
                         Screen.SETTINGS -> SettingsScreen(
                             onBack = { screenOrdinal = Screen.HOME.ordinal },
                         )
                         Screen.PROFILES -> ProfilesScreen(
+                            onBack = { screenOrdinal = Screen.HOME.ordinal },
+                        )
+                        Screen.TASKS -> TaskScreen(
                             onBack = { screenOrdinal = Screen.HOME.ordinal },
                         )
                         Screen.REPORT -> ReportScreen(

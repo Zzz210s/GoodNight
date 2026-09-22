@@ -28,6 +28,10 @@ interface FocusSessionDao {
     @Query("SELECT COUNT(*) FROM focus_session")
     suspend fun count(): Int
 
+    /** v2.1 Task 6:某任务已记录的段落合计毫秒(删除确认文案「已记录的 N 分钟」);无段为 0 */
+    @Query("SELECT COALESCE(SUM(endAt - startAt), 0) FROM focus_session WHERE taskId = :taskId")
+    suspend fun totalMillisForTask(taskId: Long): Long
+
     /** 短于阈值(误触)的段:endAt - startAt < :minMs */
     @Query("SELECT * FROM focus_session WHERE endAt - startAt < :minMs")
     suspend fun shorterThan(minMs: Long): List<FocusSessionEntity>

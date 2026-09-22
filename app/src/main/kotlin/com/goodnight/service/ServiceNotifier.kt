@@ -70,6 +70,17 @@ class ServiceNotifier(
     private fun titleOrDefault(snap: RuntimeSnapshot?, taskTitle: String?): String? =
         taskTitle ?: cachedTitle?.takeIf { it.first == snap?.taskId }?.second
 
+    /**
+     * v2.1 Task 6:任务改名/删除后重解析标题并重发通知。
+     * [cachedTitle] 按 taskId 记,不主动失效的话钳制重发会把旧名写回;而只清缓存又会让
+     * 下一次不带标题的重发连任务名一起丢掉 —— 所以这里重解析一次(顺带刷新缓存)并立即重发。
+     * 无快照时无事可做(空闲通知本就不带任务名)。
+     */
+    fun refreshTaskTitle() {
+        val snap = graph.engine.snapshot.value ?: return
+        scope.launch { post(snap, titleFor(snap)) }
+    }
+
     /** 按快照发布计时/空闲通知;有服务挂载时同时前台化。[taskTitle] 非空时标题带上任务名 */
     fun post(snap: RuntimeSnapshot?, taskTitle: String? = null) {
         val title = titleOrDefault(snap, taskTitle)

@@ -62,6 +62,7 @@ internal fun HomeTopBar(
     onSelectProfile: (ProfileEntity) -> Unit,
     onSettings: () -> Unit,
     onManageProfiles: () -> Unit,
+    onManageTasks: () -> Unit,
     onOpenReport: (ReportRange) -> Unit,
 ) {
     val animationsOn = rememberAnimationsEnabled()
@@ -147,14 +148,14 @@ internal fun HomeTopBar(
                     label = "panelSwap",
                 ) { p ->
                     if (p != null) {
-                        PanelBody(p, ui, running, onSelectProfile, onManageProfiles, onOpenReport)
+                        PanelBody(p, ui, running, onSelectProfile, onManageProfiles, onManageTasks, onOpenReport)
                     } else {
                         Box(Modifier.height(0.dp))
                     }
                 }
             }
         } else if (open != null) {
-            PanelBody(open!!, ui, running, onSelectProfile, onManageProfiles, onOpenReport)
+            PanelBody(open!!, ui, running, onSelectProfile, onManageProfiles, onManageTasks, onOpenReport)
         }
     }
 }

@@ -17,6 +17,13 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE done = 0 ORDER BY sortOrder ASC, id ASC")
     fun observeActive(): Flow<List<TaskEntity>>
 
+    /**
+     * v2.1 Task 6:[TaskRepository.moveTo] 在事务内重读的活跃列表 —— 调用方快照可能过期
+     * (拖动期间新建/取消完成),只有库内实况能保证压实后 sortOrder 不重复。
+     */
+    @Query("SELECT * FROM task WHERE done = 0 ORDER BY sortOrder ASC, id ASC")
+    suspend fun activeNow(): List<TaskEntity>
+
     /** 已完成任务:最近完成在前 */
     @Query("SELECT * FROM task WHERE done = 1 ORDER BY doneAt DESC, id DESC")
     fun observeDone(): Flow<List<TaskEntity>>
@@ -42,6 +49,9 @@ interface TaskDao {
 
     /** v2.1 Task 5:落库前校验任务仍在 —— 运行态可能还带着已删任务的 id */
     @Query("SELECT EXISTS(SELECT 1 FROM task WHERE id = :id)") suspend fun exists(id: Long): Boolean
+
+    /** v2.1 Task 6:当前完成标记(勾选完成/取消完成用);行不存在返回 null */
+    @Query("SELECT done FROM task WHERE id = :id") suspend fun doneOf(id: Long): Boolean?
     /** 末尾排序位;空表返回 null,调用方按 0 起算 */
     @Query("SELECT MAX(sortOrder) FROM task") suspend fun maxSortOrder(): Long?
 

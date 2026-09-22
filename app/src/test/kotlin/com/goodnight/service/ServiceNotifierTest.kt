@@ -73,6 +73,16 @@ class ServiceNotifierTest {
         return null
     }
 
+    /** 轮询等通知标题变为 [want](刷新在 appScope 上派发,非同步) */
+    private fun awaitTitle(want: String, timeoutMs: Long = 5_000): String? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (postedTitle() == want) return want
+            Thread.sleep(25)
+        }
+        return postedTitle()
+    }
+
     @Test fun expiryClampResendKeepsTaskName() = runBlocking {
         val a = graph.taskRepo.create("写周报", now = 1L)!!
         val notifier = graph.coordinator.notifier
@@ -85,6 +95,25 @@ class ServiceNotifierTest {
         nm().cancel(TimerNotifications.ID_NOTIFY) // 清掉首次那条:随后出现的只可能来自钳制重发
 
         assertEquals("工作中 · 写周报", awaitPostedTitle())
+    }
+
+    /**
+     * v2.1 Task 6(Task 5 遗留 minor):改名后标题缓存不失效 —— 缓存按 taskId 记,旧名会粘住,
+     * 钳制重发(不带标题)会把旧名重新写回通知。[refreshTaskTitle] 必须重解析并立即重发。
+     */
+    @Test fun refreshTaskTitlePicksUpRename() = runBlocking {
+        val a = graph.taskRepo.create("写周报", now = 1L)!!
+        val notifier = graph.coordinator.notifier
+        TimerNotifications.ensureChannels(ctx)
+        val snap = snapOf().copy(taskId = a)
+        graph.engine.restore(snap)
+        notifier.post(snap, notifier.titleFor(snap)) // 首次发布:缓存旧名
+        assertEquals("工作中 · 写周报", postedTitle())
+
+        graph.taskRepo.rename(a, "写月报")
+        notifier.refreshTaskTitle()
+
+        assertEquals("工作中 · 写月报", awaitTitle("工作中 · 写月报"))
     }
 
     @Test fun titleForRethrowsCancellationInsteadOfSwallowingIt() = runBlocking {

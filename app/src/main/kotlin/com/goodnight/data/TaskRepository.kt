@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
  */
 class TaskRepository(private val db: GoodNightDatabase) {
     private val dao: TaskDao = db.taskDao()
+    private val sessionDao = db.focusSessionDao()
 
     fun observeActive(): Flow<List<TaskEntity>> = dao.observeActive()
     fun observeDone(): Flow<List<TaskEntity>> = dao.observeDone()
@@ -33,6 +34,9 @@ class TaskRepository(private val db: GoodNightDatabase) {
      * 落库前必须用它丢弃已删任务的 id,否则会写出指向已删任务的孤儿引用。
      */
     suspend fun exists(id: Long): Boolean = dao.exists(id)
+
+    /** v2.1 Task 6:当前完成标记(勾选用);任务不存在返回 null */
+    suspend fun doneOf(id: Long): Boolean? = dao.doneOf(id)
 
     /** 校验口径同 [create];不合法时静默不改(行不存在也静默) */
     suspend fun rename(id: Long, title: String) {
@@ -54,18 +58,28 @@ class TaskRepository(private val db: GoodNightDatabase) {
     /**
      * 拖动排序:[list] 为拖动前的未完成列表(升序快照),[targetIndex] 为落点下标。
      * 重排后把 sortOrder 压实为 1..n —— 相对顺序即真相,不留空洞导致下次新建跳号。
-     * [targetIndex] 越界夹到首/尾;[id] 不在 [list] 内时不动。
+     *
+     * v2.1 Task 6:[list] 允许**过期**(拖动期间新建了任务/某行被勾选完成):事务内重读
+     * 活跃行,以 [list] 顺序为准、库内列表外的活跃行按原顺序追加到末尾,再整体压实。
+     * 若只信 [list],列表外行会保留旧 sortOrder 而与压实结果重复。
+     * [targetIndex] 越界夹到首/尾;[id] 不在 [list] 或已非活跃时不动。
      */
     suspend fun moveTo(id: Long, targetIndex: Int, list: List<TaskEntity>) {
-        val from = list.indexOfFirst { it.id == id }
-        if (from < 0) return
-        val to = targetIndex.coerceIn(0, list.lastIndex)
-        if (from == to) return
-        val reordered = list.toMutableList().apply { add(to, removeAt(from)) }
+        if (list.none { it.id == id }) return
         db.withTransaction {
-            reordered.forEachIndexed { index, task -> dao.updateSortOrder(task.id, index + 1L) }
+            val actual = dao.activeNow()
+            val present = actual.map { it.id }.toSet()
+            if (id !in present) return@withTransaction
+            val ids = (list.map { it.id }.filter { it in present } + actual.map { it.id }).distinct()
+            val from = ids.indexOf(id)
+            val to = targetIndex.coerceIn(0, ids.lastIndex)
+            val reordered = ids.toMutableList().apply { add(to, removeAt(from)) }
+            reordered.forEachIndexed { index, taskId -> dao.updateSortOrder(taskId, index + 1L) }
         }
     }
+
+    /** v2.1 Task 6:某任务已记录的合计毫秒(删除确认文案「已记录的 N 分钟」);无段/未知任务为 0 */
+    suspend fun recordedMillis(id: Long): Long = sessionDao.totalMillisForTask(id)
 
     companion object { const val MAX_TITLE = 100 }
 }

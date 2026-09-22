@@ -137,4 +137,20 @@
     <string name="notif_start">启动</string>
     <string name="backup_error_hint">备份目录授权已失效(重装或被撤销),请重新选择备份目录</string>
     <string name="backup_error_write">备份写入失败,请确认该目录可写</string>
+    <!-- tasks (v2.1) -->
+    <string name="tasks_title">任务</string>
+    <string name="tasks_active">进行中</string>
+    <string name="tasks_done">已完成</string>
+    <string name="tasks_empty_active">还没有任务,点击右上角 + 新建</string>
+    <string name="tasks_empty_done">还没有已完成的任务</string>
+    <string name="task_new">新建任务</string>
+    <string name="task_rename">重命名任务</string>
+    <string name="task_title_hint">任务名称</string>
+    <string name="task_title_blank">名称不能为空</string>
+    <string name="task_title_too_long">名称过长(最多 %1$d 字)</string>
+    <string name="task_delete_title">删除任务</string>
+    <string name="task_delete_confirm">将删除任务,已记录的 %1$d 分钟会保留为未绑定</string>
+    <string name="task_delete">删除任务</string>
+    <string name="task_drag">长按拖动排序</string>
+    <string name="task_done_at">完成于 %1$s</string>
 </resources>
