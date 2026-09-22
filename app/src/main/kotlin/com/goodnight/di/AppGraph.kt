@@ -11,6 +11,7 @@ import com.goodnight.data.DailyTotalRepository
 import com.goodnight.data.ProfileRepository
 import com.goodnight.data.RuntimeStateStore
 import com.goodnight.data.SettingsRepository
+import com.goodnight.data.TaskRepository
 import com.goodnight.data.db.GoodNightDatabase
 import com.goodnight.timer.SystemTimeProvider
 import com.goodnight.timer.TimerEngine
@@ -48,6 +49,7 @@ class AppGraph(
 
     val profileRepo = ProfileRepository(db.profileDao(), time)
     val totalsRepo = DailyTotalRepository(db, db.dailyTotalDao(), db.focusSessionDao(), time)
+    val taskRepo = TaskRepository(db)
 
     private val ds = PreferenceDataStoreFactory.create(scope = appScope) {
         context.preferencesDataStoreFile(storeFileName)
