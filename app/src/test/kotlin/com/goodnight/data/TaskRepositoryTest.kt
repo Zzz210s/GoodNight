@@ -90,6 +90,16 @@ class TaskRepositoryTest {
         assertEquals("写月报", repo.observeActive().first().single().title)
     }
 
+    /** v2.1 Task 5:按 id 查标题(通知标题拼接用);已完成任务也要查得到,未知 id 返回 null */
+    @Test fun titleByIdResolvesActiveDoneAndUnknown() = runTest {
+        val id = repo.create("写周报", now = 1)!!
+        assertEquals("写周报", repo.titleById(id))
+
+        repo.setDone(id, done = true, now = 2_000) // 段仍可能绑定已完成任务:名字必须照常给出
+        assertEquals("写周报", repo.titleById(id))
+        assertNull(repo.titleById(9_999L))
+    }
+
     @Test fun setDoneMovesBetweenListsAndStampsDoneAt() = runTest {
         val id = repo.create("写周报", now = 1)!!
         repo.setDone(id, done = true, now = 9_000)

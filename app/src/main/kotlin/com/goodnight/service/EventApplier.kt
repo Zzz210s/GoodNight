@@ -2,6 +2,7 @@ package com.goodnight.service
 
 import com.goodnight.di.AppGraph
 import com.goodnight.timer.EngineEvent
+import com.goodnight.timer.parseTaskCuts
 import com.goodnight.service.EventPolicy
 
 /** v1.3 #6:事件携带的工作段窗口/归属读取(仅结算类事件含字段,其余为空) */
@@ -33,6 +34,22 @@ private fun EngineEvent.profileIdOf(): Long? = when (this) {
     else -> null
 }
 
+/** v2.1:事件携带的本段任务(仅结算类事件含字段,其余为空) */
+private fun EngineEvent.taskIdOf(): Long? = when (this) {
+    is EngineEvent.PhaseFinished -> taskId
+    is EngineEvent.PhaseRestarted -> taskId
+    is EngineEvent.Reset -> taskId
+    else -> null
+}
+
+/** v2.1:事件携带的本段任务切点表(每项 = 切点墙钟, 切换前任务, 切换后任务) */
+private fun EngineEvent.taskCutsOf(): List<Triple<Long, Long?, Long?>> = when (this) {
+    is EngineEvent.PhaseFinished -> parseTaskCuts(taskCuts)
+    is EngineEvent.PhaseRestarted -> parseTaskCuts(taskCuts)
+    is EngineEvent.Reset -> parseTaskCuts(taskCuts)
+    else -> emptyList()
+}
+
 /**
  * 引擎事件 -> 服务反应(v1.3 拆分):settle 落账 / 段记录 / 闹钟武装 / 检查点 / 提醒。
  * 调用方必须已持有引擎锁(内部不加锁;落库与 EventPolicy 决策需与 ticker 串行)。
@@ -59,7 +76,19 @@ internal class EventApplier(
             // 否则一次 60s 检查点后 settle==0 会让整段不入账,正是"终止后无时间段"的根因)
             if (ss != null && se != null && se > ss && pid != null) {
                 if (se - ss < MIN_MIS_TOUCH_MS) ignoreMisTouch = true
-                else graph.totalsRepo.recordWorkSessionSplit(pid, ss, se, ev.pauseWindows())
+                else {
+                    // v2.1:整段的段首任务只能取段内**最早切点的 fromTaskId** —— 事件的 taskId 是
+                    // 段内最后一个子段的任务,段内无切点时它才等于段首任务。切点表映射为
+                    // 「(切点, 从该切点起那一段的 taskId)」,由落库层逐段归属(一次调用内各段分属不同任务)。
+                    // TaskSwitched 本身在此不产生任何动作:切点已由引擎记入快照并随结算事件下发。
+                    val cuts = ev.taskCutsOf()
+                    val headTaskId = cuts.minByOrNull { it.first }?.second ?: ev.taskIdOf()
+                    graph.totalsRepo.recordWorkSessionSplit(
+                        pid, ss, se, ev.pauseWindows(),
+                        taskId = headTaskId,
+                        taskCuts = cuts.map { it.first to it.third },
+                    )
+                }
             }
             // v1.10.8:自动备份改由"数据变动心跳"统一触发(见 GoodNightApp.watchDataChanges),
             // 这里不再单独触发;合计也不再单独累加 —— 由 recomputeDay 从段落派生。

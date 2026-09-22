@@ -25,6 +25,9 @@ class TaskRepository(private val db: GoodNightDatabase) {
         return dao.insert(TaskEntity(title = t, createdAt = now, sortOrder = (dao.maxSortOrder() ?: 0L) + 1))
     }
 
+    /** v2.1 Task 5:按 id 取标题(通知标题拼接用);未知 id 返回 null,已完成任务照常返回 */
+    suspend fun titleById(id: Long): String? = dao.titleById(id)
+
     /** 校验口径同 [create];不合法时静默不改(行不存在也静默) */
     suspend fun rename(id: Long, title: String) {
         val t = title.trim()

@@ -104,11 +104,13 @@ class TimerService : Service() {
 
     override fun onBind(intent: Intent?) = null
 
-    /** 快照观察:活跃 → 前台化;空闲 → 脱离前台并保留空闲常驻通知后自停 */
-    private fun onSnapshot(snap: com.goodnight.timer.RuntimeSnapshot?) {
+    /** 快照观察:活跃 → 前台化(标题带任务名);空闲 → 脱离前台并保留空闲常驻通知后自停 */
+    private suspend fun onSnapshot(snap: com.goodnight.timer.RuntimeSnapshot?) {
         runCatching {
             when {
-                snap != null -> startForegroundCompat(TimerNotifications.inProgress(this, snap))
+                snap != null -> startForegroundCompat(
+                    TimerNotifications.inProgress(this, snap, coordinator.notifier.titleFor(snap)),
+                )
                 awaitingSnapshot || stopDraining -> Unit
                 else -> tearDownToIdle()
             }

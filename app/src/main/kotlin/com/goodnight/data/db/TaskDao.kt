@@ -34,6 +34,11 @@ interface TaskDao {
     @Query("UPDATE focus_session SET taskId = NULL WHERE taskId = :taskId")
     suspend fun clearTaskRefs(taskId: Long)
 
+    /**
+     * v2.1 Task 5:按 id 取标题(通知标题拼接用)。不过滤 done —— 段可能绑定一个后来
+     * 被标记完成的任务,通知仍要显示它的名字。未知 id 返回 null。
+     */
+    @Query("SELECT title FROM task WHERE id = :id") suspend fun titleById(id: Long): String?
     /** 末尾排序位;空表返回 null,调用方按 0 起算 */
     @Query("SELECT MAX(sortOrder) FROM task") suspend fun maxSortOrder(): Long?
 

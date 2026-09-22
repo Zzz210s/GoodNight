@@ -67,7 +67,7 @@ class EngineCoordinator(private val graph: AppGraph) {
                     .collect { dispatch(it) }
             }
             launch {
-                graph.engine.snapshot.collect { if (!serviceAttached) notifier.post(it) }
+                graph.engine.snapshot.collect { if (!serviceAttached) notifier.post(it, notifier.titleFor(it)) }
             }
         }
     }
@@ -119,7 +119,7 @@ class EngineCoordinator(private val graph: AppGraph) {
             ReconcileAction.FINISH_EXPIRED -> graph.engine.onExpired()
             ReconcileAction.RESUME_ACTIVE, ReconcileAction.SHOW_PAUSED -> {
                 val s = graph.engine.snapshot.value
-                notifier.post(s)
+                notifier.post(s, notifier.titleFor(s))
                 // 活跃态重新武装到期闹钟(服务死后闹钟可能已被系统清理)
                 graph.alarmScheduler.arm(s)
             }

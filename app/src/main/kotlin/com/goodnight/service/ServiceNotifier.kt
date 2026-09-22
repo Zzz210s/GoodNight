@@ -39,9 +39,18 @@ class ServiceNotifier(
         foregroundSink = sink
     }
 
-    /** 按快照发布计时/空闲通知;有服务挂载时同时前台化 */
-    fun post(snap: RuntimeSnapshot?) {
-        val n = if (snap != null) TimerNotifications.inProgress(context, snap)
+    /**
+     * v2.1:快照绑定任务的标题(通知标题拼接用)。未绑定 / 已删除 / 查询失败一律 null,
+     * 通知回退到相位文案 —— 发布路径不能因一次 DB 查询失败而中断。
+     */
+    suspend fun titleFor(snap: RuntimeSnapshot?): String? {
+        val id = snap?.taskId ?: return null
+        return runCatching { graph.taskRepo.titleById(id) }.getOrNull()
+    }
+
+    /** 按快照发布计时/空闲通知;有服务挂载时同时前台化。[taskTitle] 非空时标题带上任务名 */
+    fun post(snap: RuntimeSnapshot?, taskTitle: String? = null) {
+        val n = if (snap != null) TimerNotifications.inProgress(context, snap, taskTitle)
         else TimerNotifications.minimal(context)
         runCatching {
             context.getSystemService(android.app.NotificationManager::class.java)
@@ -49,7 +58,7 @@ class ServiceNotifier(
         }
         DiagLog.add(
             "Notif",
-            "发布通知 有快照=${snap != null} 前台化=${foregroundSink != null} ${DiagLog.env()}",
+            "发布通知 有快照=${snap != null} 任务=${taskTitle ?: "无"} 前台化=${foregroundSink != null} ${DiagLog.env()}",
         )
         foregroundSink?.invoke(n)
         scheduleExpiryClamp(snap)
