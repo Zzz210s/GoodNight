@@ -31,15 +31,19 @@ import com.goodnight.ui.morph.PathIcon
  * 空闲(无工作段)时禁点:此时没有可绑定的段(引擎 `setTask` 无快照即 no-op),
  * 点了只会白拉起一次前台服务、并留下"选了却没生效"的错觉。
  *
- * 宽度由调用方决定:chip 在卡片内容流内与徽标同排、与大数字不同排(见 [com.goodnight.ui.home.TimerCard]),
- * 故不再限宽 —— 名字多长都由调用方给的可用宽 + 省略号收敛,不依赖任何"屏宽/字号/数字位数"假设。
+ * 宽度**必须由调用方给定**(如 `Modifier.weight(1f, fill = false)`):chip 在卡片内容流内与徽标
+ * 同排、与大数字不同排(见 [com.goodnight.ui.home.TimerCard]),故不自带限宽 —— 名字多长都由
+ * 调用方给的可用宽 + 省略号收敛,不依赖任何"屏宽/字号/数字位数"假设。
+ *
+ * 修复轮 3:去掉 `modifier` 的默认值。默认值是个陷阱 —— 忘了传 `weight` 时 chip 先按自然宽参与
+ * 测量,长标题可能占满整行,后面徽标的剩余空间被压到 0(徽标消失且无任何报错)。
  */
 @Composable
 internal fun TaskChip(
     taskTitle: String?,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
 ) {
     AssistChip(
         onClick = onClick,
