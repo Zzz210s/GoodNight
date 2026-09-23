@@ -19,6 +19,12 @@ object TimerCommands {
         context.startService(restartPhaseIntent(context, profileId, workMillis, restMillis, countUp))
     }
 
+    /**
+     * v2.1 Task 7:绑定/解绑当前工作段的任务(null = 不绑定)。计时中切换由引擎按切点切段(§3)。
+     * 与其它命令同走 Intent -> [TimerService] -> [EngineCoordinator](引擎的唯一驱动者)。
+     */
+    fun setTask(context: Context, taskId: Long?) = context.startService(setTaskIntent(context, taskId))
+
     internal fun startIntent(context: Context, profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean) =
         intent(context, ACTION_START)
             .putExtra(EXTRA_PROFILE_ID, profileId)
@@ -35,4 +41,7 @@ object TimerCommands {
 
     private fun intent(context: Context, action: String) =
         Intent(context, TimerService::class.java).setAction(action)
+
+    internal fun setTaskIntent(context: Context, taskId: Long?) =
+        intent(context, ACTION_SET_TASK).putExtra(EXTRA_TASK_ID, taskId ?: NO_TASK_ID)
 }

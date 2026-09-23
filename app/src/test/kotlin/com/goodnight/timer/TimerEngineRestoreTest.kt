@@ -21,6 +21,22 @@ class TimerEngineRestoreTest {
         assertEquals(42_000L, s.ckptAccum)
     }
 
+    /** v2.1:杀进程/重启后绑定仍在 —— 恢复带任务的快照即可;同值重复下发不得产生假段边界 */
+    @Test fun restoredSnapshotKeepsTaskBinding() = runTest {
+        val t = FakeTime()
+        val e = testEngine(t)
+        e.restore(null)
+        e.start(1, 60_000L, 30_000L)
+        e.setTask(7L)
+        val before = e.snapshot.value!!
+        t.el = 2_000L; t.nowMs += 90_000L // 模拟设备重启(elapsed 清零、墙钟前移)
+        e.adoptRestored(StateRestorer.afterBoot(before, t.nowMs, t.el))
+        assertEquals(7L, e.snapshot.value!!.taskId)
+        val seen = recordEvents(e)
+        e.setTask(7L) // UI 恢复后按旧值重复下发
+        assertTrue(seen.none { it is EngineEvent.TaskSwitched })
+    }
+
     /** Task 7 review 缺陷回归:重启期间 PAUSED,resume 后 accruedWork 必须从冻结值继续,
      *  不得坍缩导致 ckptAccum 游标倒退、已落库工作量重复计数 */
     @Test fun resumeAfterBootReanchorsAccruedWork() = runTest {

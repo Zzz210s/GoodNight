@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,10 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.goodnight.data.DayPeriod
 import com.goodnight.data.dayPeriodOf
-import com.goodnight.data.groupByPeriod
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -86,6 +85,9 @@ private fun ProfileSection(row: DayDetailRow) {
         }
         // v1.10:各段 开始~结束(时:分)。左侧固定单列大时段标识(纯文字,无色块);
         // 标识右侧为双列时间段,单行不换行。
+        // v2.1 Task 7:显示走 [DayDetailRow.taskSpans](按任务切点切开),时段一行、任务名另起一行
+        // (名字与时间同行时可用宽度只剩 ≈5 个汉字);未绑定段不显示名字、仍只占一行。
+        // 区间集合与行合计仍由 [DayDetailRow.sessions] 决定。
         if (row.sessions.isNotEmpty()) {
             val zone = ZoneId.systemDefault()
             // v1.10.10:列宽按**当前字体大小实测**得出(而不是写死 dp)——大字号/系统字体放大时
@@ -94,9 +96,8 @@ private fun ProfileSection(row: DayDetailRow) {
             val labelStyle = MaterialTheme.typography.labelMedium
             val density = LocalDensity.current
             val periodColW = with(density) { measurer.measure("凌晨", labelStyle).size.width.toDp() } + 4.dp
-            val spanColW = with(density) { measurer.measure("00:00 ~ 00:00", labelStyle).size.width.toDp() } + 2.dp
             Column(Modifier.fillMaxWidth().padding(start = 18.dp, top = 2.dp)) {
-                groupByPeriod(row.sessions, zone).forEach { (period, spans) ->
+                groupSpansByPeriod(row.taskSpans, zone).forEach { (period, spans) ->
                     spans.chunked(2).forEachIndexed { lineIdx, pair ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -108,10 +109,14 @@ private fun ProfileSection(row: DayDetailRow) {
                                 modifier = Modifier.width(periodColW),
                             )
                             Spacer(Modifier.width(PERIOD_GAP_W))
-                            SpanText(pair[0], zone, Modifier.widthIn(min = spanColW))
+                            // v2.1 Task 7(修复轮 2):两列**等分固定宽**(weight 1f + fill = true)。
+                            // 用 fill = false + widthIn(min) 时格宽随名字长短变化,同一卡片不同行的
+                            // 第二列起点会不一致(AVD 实测 548px vs 631px)——改成等分后第二列起点
+                            // = 标识列 + 间距 + 半格宽,与内容长度无关,行行对齐。名字在格内截断。
+                            SpanCell(pair[0], zone, Modifier.weight(1f))
                             if (pair.size > 1) {
                                 Spacer(Modifier.width(SPAN_GAP_W))
-                                SpanText(pair[1], zone, Modifier.widthIn(min = spanColW))
+                                SpanCell(pair[1], zone, Modifier.weight(1f))
                             }
                         }
                     }
@@ -121,18 +126,36 @@ private fun ProfileSection(row: DayDetailRow) {
     }
 }
 
-/** 单条时间段文本:HH:mm ~ HH:mm(单行不换行) */
+/**
+ * 单个时间段单元格:第一行 HH:mm ~ HH:mm;绑定了任务时名字**另起一行**。
+ * 名字与时间同行时可用宽度只剩 `整格 - 时间文本`(Pixel_8 实测 ≈133px,约 4 个汉字),
+ * 常见的 "WriteReport" 类名字会被截掉一半;独立一行后用满整格宽(等分格宽)。
+ * 名字不存在(未绑定)时只有一行,单元格高度不增加。单行 + 省略号。
+ */
 @Composable
-private fun SpanText(seg: Pair<Long, Long>, zone: ZoneId, modifier: Modifier = Modifier) {
-    Text(
-        HHmm.format(Instant.ofEpochMilli(seg.first).atZone(zone)) + " ~ " +
-            HHmm.format(Instant.ofEpochMilli(seg.second).atZone(zone)),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        softWrap = false,
-        modifier = modifier,
-    )
+private fun SpanCell(span: DaySpan, zone: ZoneId, modifier: Modifier = Modifier) {
+    val time = HHmm.format(Instant.ofEpochMilli(span.start).atZone(zone)) + " ~ " +
+        HHmm.format(Instant.ofEpochMilli(span.end).atZone(zone))
+    Column(modifier) {
+        Text(
+            time,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+        span.taskName?.let { name ->
+            Text(
+                name,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 /** 大时段标识与时间段之间的间距(比两列时间段之间大,层次更清楚) */

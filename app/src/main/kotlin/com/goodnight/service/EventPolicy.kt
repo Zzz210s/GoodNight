@@ -58,6 +58,9 @@ object EventPolicy {
             add(EventEffect.CancelAlarm)
             settle(ev.settleMillis, ev.profileId)?.let(::add)
         }
+        // v2.1 任务切换:本任务只发事件(边界时刻由引擎按状态定),切段落库的消费在 Task 5
+        // (EventApplier 接线),此处不改变闹钟与结算游标。
+        is EngineEvent.TaskSwitched -> emptyList()
     }
 
     /** settle<=0 无落库意义,不产生效果(幂等性:空效果即零副作用) */

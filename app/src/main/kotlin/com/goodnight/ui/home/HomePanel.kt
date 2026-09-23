@@ -23,7 +23,7 @@ import com.goodnight.ui.report.ReportRange
 import com.goodnight.ui.theme.MotionTokens
 import com.goodnight.ui.theme.rememberAnimationsEnabled
 
-/** 顶栏可展开的面板类型:配置选择 / 报表入口 */
+/** 顶栏可展开的面板类型:配置选择 / 菜单(任务入口 + 报表入口) */
 internal enum class HomePanel { PROFILE, REPORT }
 
 
@@ -34,6 +34,7 @@ internal fun PanelBody(
     running: Boolean,
     onSelectProfile: (ProfileEntity) -> Unit,
     onManageProfiles: () -> Unit,
+    onManageTasks: () -> Unit,
     onOpenReport: (ReportRange) -> Unit,
 ) {
     val surface = MaterialTheme.colorScheme.surface
@@ -75,6 +76,16 @@ internal fun PanelBody(
                 }
             }
             HomePanel.REPORT -> {
+                // v2.1 Task 6:菜单顶部固定「任务」入口(与时钟管理同风格),下方才是报表三段页签
+                Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onManageTasks)
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.tasks_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    PathIcon(IconPaths.BACK, size = 18.dp, contentDescription = null)
+                }
+                HorizontalDivider()
                 // v1.4 #1:菜单与报表三段页签对齐(周报/月报/时钟累计);标签走资源(跟随系统语言)
                 val rows = listOf(
                     ReportRange.WEEK to stringResource(com.goodnight.R.string.tab_week),

@@ -16,8 +16,8 @@ android {
         applicationId = "com.goodnight"
         minSdk = 26
         targetSdk = 35
-        versionCode = 66
-        versionName = "2.0.0"
+        versionCode = 67
+        versionName = "2.1.0"
     }
     val keystoreProps = rootProject.file("local.properties").let { f ->
         if (f.exists()) Properties().apply { f.inputStream().use { load(it) } } else null
@@ -101,4 +101,9 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core.ktx)
+    // v2.1 Task 7 修复轮 2:布局类断言(chip 与大数字分属两行、详情两列等分对齐)需要真实的
+    // Compose 测量/放置结果 —— 用 Robolectric 跑 ui-test 的 createComposeRule(),不靠肉眼截图。
+    // ui-test-manifest 提供 ComponentActivity(仅 debug 变体合并进清单,不进发布包)。
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

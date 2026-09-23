@@ -2,8 +2,6 @@ package com.goodnight.ui.report
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.goodnight.data.db.DayProfileTotal
-import com.goodnight.data.db.ProfileEntity
 import com.goodnight.di.AppGraph
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,17 +12,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 enum class ReportRange { WEEK, MONTH, LIFETIME }
-
-data class ReportRow(
-    val label: String,
-    val millis: Long,
-    /** v1.4 本地化辅助:月报桶序号与起止(MM-dd);0 = 非桶行 */
-    val weekIndex: Int = 0,
-    val rangeFrom: String = "",
-    val rangeTo: String = "",
-)
-
-data class ProfileTotalUi(val profileName: String, val millis: Long)
 
 data class ReportUiState(
     val range: ReportRange = ReportRange.WEEK,
@@ -38,54 +25,9 @@ data class ReportUiState(
     val canGoNext: Boolean = false,
     /** v1.9.13 #43:首次打开应用日期(往期回顾起点);无历史时为空 */
     val firstLaunch: LocalDate? = null,
+    /** v2.1 Task 8:按任务分解(周/月;时钟累计页签为空;窗口内无段也为空) */
+    val taskSlices: List<TaskSliceUi> = emptyList(),
 )
-
-/** 报表窗口(闭区间 ISO 日期):周 = 本周一(ISO 周一为一周首日)至 today;月 = 本月 1 日至 today。 */
-fun reportWindow(range: ReportRange, today: LocalDate): Pair<String, String> = when (range) {
-    ReportRange.WEEK -> {
-        val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
-        monday.toString() to today.toString()
-    }
-    ReportRange.MONTH -> today.withDayOfMonth(1).toString() to today.toString()
-    ReportRange.LIFETIME -> LocalDate.ofEpochDay(0).toString() to today.toString()
-}
-
-/**
- * 明细行。周报:逐日行(label "MM-dd");月报:按周分桶(label "第 N 周(MM-dd~MM-dd)",
- * 桶 = 当月按日切 7 天段,跨月末尾桶止于 today)。raw 只含窗口内有数据的单元,按日期升序。
- */
-fun reportRows(range: ReportRange, today: LocalDate, raw: List<DayProfileTotal>): List<ReportRow> {
-    val byDate = raw.groupBy { it.date }.mapValues { (_, rs) -> rs.sumOf { it.total } }
-    val dates = byDate.toSortedMap()
-    return when (range) {
-        ReportRange.WEEK -> dates.map { (date, m) -> ReportRow(date.substring(5), m) }
-        ReportRange.LIFETIME -> emptyList() // 长期累计走 profileTotals,明细为空
-        ReportRange.MONTH -> dates.entries
-            .groupBy { (date, _) -> (LocalDate.parse(date).dayOfMonth - 1) / 7 + 1 }
-            .map { (bucket, dayEntries) ->
-                val start = today.withDayOfMonth((bucket - 1) * 7 + 1)
-                val end = start.plusDays(6).let { if (it.isAfter(today)) today else it }
-                val from = start.toString().substring(5)
-                val to = end.toString().substring(5)
-                ReportRow("第 $bucket 周($from~$to)", dayEntries.sumOf { it.value }, bucket, from, to)
-            }
-    }
-}
-
-fun reportProfileTotals(
-    profiles: List<ProfileEntity>,
-    raw: List<DayProfileTotal>,
-): List<ProfileTotalUi> = raw
-    // v1.10.8:已删除配置不参与统计(其段落/合计在删除时已级联清理,这里再兜一层)
-    .filter { r -> profiles.any { it.id == r.profileId } }
-    .groupBy { it.profileId }
-    .map { (id, rs) ->
-        ProfileTotalUi(
-            profileName = profiles.first { it.id == id }.name,
-            millis = rs.sumOf { it.total },
-        )
-    }
-    .sortedByDescending { it.millis }
 
 class ReportViewModel(
     val graph: AppGraph,
@@ -107,7 +49,9 @@ class ReportViewModel(
                 _anchor,
                 graph.totalsRepo.dayTotals(EPOCH),
                 graph.profileRepo.profiles,
-            ) { range, _, _, _ -> range }
+                // v2.1 Task 8:task 表并入失效信号 —— 任务页改名后报表的「按任务」名称即时跟上
+                graph.taskRepo.observeAll(),
+            ) { range, _, _, _, _ -> range }
                 .collect { refreshInternal() }
         }
         // v1.9.13 #43(修正):往期回顾下限 = 应用安装日(firstInstallTime —— “打开软件那一天”)。
@@ -178,6 +122,8 @@ class ReportViewModel(
         val endMs = LocalDate.parse(to).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val sessions = graph.totalsRepo.sessionsBetweenMs(startMs, endMs)
         val (metrics, slots) = summarizeWindow(from, to, raw, sessions, prevTotal, zone)
+        val taskSlices = if (lifetime) emptyList()
+        else taskBreakdownUi(graph.totalsRepo.taskBreakdown(startMs, endMs))
         _ui.value = ReportUiState(
             range = range,
             rows = if (lifetime) emptyList() else reportRows(range, anchor, raw),
@@ -187,6 +133,7 @@ class ReportViewModel(
             anchor = anchor,
             canGoNext = !lifetime && anchor.isBefore(today),
             firstLaunch = _ui.value.firstLaunch,
+            taskSlices = taskSlices,
         )
     }
 

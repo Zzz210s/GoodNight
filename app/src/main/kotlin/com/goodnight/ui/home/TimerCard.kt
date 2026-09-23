@@ -13,7 +13,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,14 +36,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.timer.DurationFormat
 import com.goodnight.timer.Phase
 import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
+import com.goodnight.ui.tasks.TaskChip
 import com.goodnight.ui.theme.MotionTokens
 import com.goodnight.ui.theme.rememberAnimationsEnabled
+
+/** 顶部横带(chip + 相位/循环徽标)的测试标记:布局测试用它取**行的真实宽度**。
+ *  行宽 = 卡片宽 - 2 x 16dp 内边距,恒小于屏宽(360dp 屏上行宽 328dp),
+ *  「chip 最多占半行」这类份额断言必须用行宽,否则会放宽一倍而失去判别力。 */
+internal const val TIMER_TOP_ROW_TAG = "timer_top_row"
 
 /** 计时卡:阶段文案(D7 交叉交换)+ 大数字(倒计时剩余 / 正计时已走)+ 循环徽标 + 动作区(重排见 TimerActions.kt)
  *  countUp(运行快照或当前配置为正计时)时:无到期/循环概念 → 徽标隐藏;skip 引擎已 no-op → 键隐藏 */
@@ -52,6 +58,8 @@ import com.goodnight.ui.theme.rememberAnimationsEnabled
 internal fun TimerCard(
     ui: HomeUiState,
     displayMillis: Long,
+    taskTitle: String?,
+    onTaskChipClick: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -65,17 +73,47 @@ internal fun TimerCard(
         ui.profiles.firstOrNull { it.id == ui.activeProfileId }?.mode == ProfileMode.COUNTUP
     val animationsOn = rememberAnimationsEnabled()
     Card(Modifier.fillMaxWidth()) {
-        Box {
-            val phaseRes = when {
-                snap == null -> R.string.state_idle
-                snap.phase == Phase.WORK -> R.string.state_work
-                else -> R.string.state_rest
-            }
-            Column(
-                Modifier.padding(16.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        val phaseRes = when {
+            snap == null -> R.string.state_idle
+            snap.phase == Phase.WORK -> R.string.state_work
+            else -> R.string.state_rest
+        }
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // v2.1 Task 7(修复轮 2):顶部横带 = 当前任务 chip(左)+ [相位图标][循环徽标](右)。
+            // chip 在**内容流内**,与居中的大数字分属两行 —— 重叠在结构上不可能发生,不再依赖
+            // "chip 限宽 < 大数字左沿"的几何余量。weight(1f, fill = false) 让名字再长也只占半行。
+            Row(
+                Modifier.fillMaxWidth().testTag(TIMER_TOP_ROW_TAG),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                TaskChip(
+                    taskTitle = taskTitle,
+                    enabled = snap != null,
+                    onClick = onTaskChipClick,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // v2.1 Task 7(修复轮 3):徽标组**自己等分剩余空间 + 组内 End 对齐**,配外行的
+                // `Arrangement.SpaceBetween`。旧写法(等分 Spacer + 默认 Arrangement.Start)在 chip
+                // 自然宽不足份额时把余量堆到行尾,徽标左沿变成 `chipW + 份额`,随任务名长度与
+                // 屏宽漂移(360dp 短标题 -23dp、800dp 等效宽落到卡片中间),切换任务时还横向跳动。
+                // 现在余量由 arrangement 放进 chip 与徽标组之间,徽标右沿恒等于行右沿。
+                Row(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PhaseIndicator(phaseRes)
+                    if (!countUpActive) {
+                        Spacer(Modifier.width(10.dp))
+                        CycleBadge(count = snap?.cycleCount ?: 0, animationsOn = animationsOn)
+                    }
+                }
+            }
             // #3 空态引导:无配置时倒计时数字位换文案(数字必为 00:00,无意义),
             // 开始键维持 disabled(activeProfileId == -1),另提供直达时钟管理的按钮
             // v1.1 #7:空态 ↔ 计时内容交叉淡入/展开;关闭动画直切(M1 门控)
@@ -125,18 +163,6 @@ internal fun TimerCard(
                 onSkip = { act(onSkip) },
                 onStop = { act(onStop) },
             )
-            }
-            // v1.9.9:右上角同排 [相位图标][循环徽标];相位图标始终显示(空闲/工作/休息),循环徽标仅倒计时显示
-            Row(
-                Modifier.align(Alignment.TopEnd).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PhaseIndicator(phaseRes)
-                if (!countUpActive) {
-                    Spacer(Modifier.width(10.dp))
-                    CycleBadge(count = snap?.cycleCount ?: 0, animationsOn = animationsOn)
-                }
-            }
         }
     }
 }

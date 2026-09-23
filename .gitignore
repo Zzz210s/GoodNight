@@ -1,5 +1,9 @@
 # AI 运行文件(全局规则:永不上传远程仓库)
 docs/superpowers/
+.superpowers/
+.verify/
+.emu*.log
+*.emu*.log
 .claude/
 .ccto/
 .aider*

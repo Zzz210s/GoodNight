@@ -49,6 +49,13 @@ object TimerNotifications {
         )
     }
 
+    /**
+     * v2.1:计时通知标题 —— 绑定任务时拼上任务名(「工作中 · 写周报」);
+     * 未绑定 / 标题查不到 / 纯空白时维持原相位文案。
+     */
+    fun workTitle(phaseText: String, taskTitle: String?): String =
+        if (taskTitle.isNullOrBlank()) phaseText else "$phaseText · $taskTitle"
+
     /** 引擎快照未就绪的最小占位通知:onStartCommand 同步前台化先顶上 */
     /** 有快照用计时通知,无快照用最小通知(服务同步前台化用) */
     fun inProgressOrMinimal(context: android.content.Context, snap: com.goodnight.timer.RuntimeSnapshot?): Notification =
@@ -65,10 +72,11 @@ object TimerNotifications {
             .setContentIntent(activityIntent(context))
             .build()
 
-    /** 空闲常驻通知:RemoteViews(相位图标 + 时钟名 + 右侧启动图标按钮),计时后被同 ID 覆盖 */
-    fun inProgress(context: Context, snap: RuntimeSnapshot): Notification {
-        val phaseText = context.getString(
-            if (snap.phase == Phase.WORK) R.string.state_work else R.string.state_rest,
+    /** 计时态通知(RemoteViews:相位图标 + 倒计时/定格 + 循环 + 图标按钮);[taskTitle] 非空时标题带任务名 */
+    fun inProgress(context: Context, snap: RuntimeSnapshot, taskTitle: String? = null): Notification {
+        val phaseText = workTitle(
+            context.getString(if (snap.phase == Phase.WORK) R.string.state_work else R.string.state_rest),
+            taskTitle,
         )
         val paused = snap.status == EngineStatus.PAUSED
         val countUp = snap.countUp
@@ -186,10 +194,3 @@ object TimerNotifications {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 }
-
-/** 运行态时钟基线(v1.9.4):基于 SystemClock.elapsedRealtime() 的绝对基 —— Chronometer 只认这条时间轴。 */
-internal data class ClockSpec(val base: Long, val countDown: Boolean)
-
-internal fun buildClockSpec(snap: RuntimeSnapshot): ClockSpec =
-    if (snap.countUp) ClockSpec(snap.startElapsed + snap.timeSpentPaused, false)
-    else ClockSpec(snap.endElapsed, true)

@@ -66,6 +66,20 @@ class EngineCoordinatorTest {
         assertNull(g.engine.snapshot.value)
     }
 
+    /**
+     * v2.1 Task 7:任务切换命令同样经协调器落到引擎(唯一驱动者 + 同一把 mutex),
+     * 不再像 Task 6 的删除路径那样绕过锁直接调 `engine.setTask`。
+     */
+    @Test fun setTaskCommandRoutesThroughCoordinator() = runBlocking {
+        val g = graphFor("coord_set_task")
+        g.coordinator.run(TimerCommand(ACTION_START, profileId = 1L, workMillis = 60_000L, restMillis = 30_000L))
+        assertNull(g.engine.snapshot.value!!.taskId)
+        g.coordinator.run(TimerCommand(ACTION_SET_TASK, taskId = 7L))
+        assertEquals(7L, g.engine.snapshot.value!!.taskId)
+        g.coordinator.run(TimerCommand(ACTION_SET_TASK, taskId = null))
+        assertNull("「不绑定」= 清空运行态绑定", g.engine.snapshot.value!!.taskId)
+    }
+
     /** 到期推进:WORK -> REST;再调一次幂等(不重复推进) */
     @Test fun advanceIfExpiredIsIdempotent() = runBlocking {
         val g = graphFor("coord_advance")

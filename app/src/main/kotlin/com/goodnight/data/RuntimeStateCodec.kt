@@ -26,6 +26,8 @@ object RuntimeStateCodec {
     private const val SESS_START = "rt_session_start_wall"
     private const val PAUSE_START = "rt_pause_start_wall"
     private const val PAUSE_GAPS = "rt_pause_gaps"
+    private const val TASK_ID = "rt_task_id"
+    private const val TASK_CUTS = "rt_task_cuts"
 
     fun toMap(s: RuntimeSnapshot?): Map<String, String> {
         if (s == null) return emptyMap()
@@ -44,7 +46,11 @@ object RuntimeStateCodec {
             // v1.12.1 专注窗口:仅在有效时写键,旧快照逐字节不变
             (s.sessionStartWall?.let { mapOf(SESS_START to it.toString()) } ?: emptyMap()) +
             (s.pauseStartWall?.let { mapOf(PAUSE_START to it.toString()) } ?: emptyMap()) +
-            (if (s.pauseGaps.isNotEmpty()) mapOf(PAUSE_GAPS to s.pauseGaps) else emptyMap())
+            (if (s.pauseGaps.isNotEmpty()) mapOf(PAUSE_GAPS to s.pauseGaps) else emptyMap()) +
+            // v2.1 当前任务:仅在绑定时写键,未绑定与旧快照逐字节不变
+            (s.taskId?.let { mapOf(TASK_ID to it.toString()) } ?: emptyMap()) +
+            // v2.1 任务切点:仅在非空时写键(空串即“清空”),旧快照逐字节不变
+            (if (s.taskCuts.isNotEmpty()) mapOf(TASK_CUTS to s.taskCuts) else emptyMap())
     }
 
     fun fromMap(m: Map<String, String>): RuntimeSnapshot? {
@@ -70,6 +76,10 @@ object RuntimeStateCodec {
             sessionStartWall = m[SESS_START]?.toLongOrNull(),
             pauseStartWall = m[PAUSE_START]?.toLongOrNull(),
             pauseGaps = m[PAUSE_GAPS] ?: "",
+            // 旧状态无此键 -> null(未绑定)
+            taskId = m[TASK_ID]?.toLongOrNull(),
+            // 旧状态无此键 -> 空串(无切点)
+            taskCuts = m[TASK_CUTS] ?: "",
         )
     }
 }

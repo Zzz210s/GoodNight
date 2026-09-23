@@ -11,6 +11,9 @@ const val ACTION_STOP = "com.goodnight.action.STOP"
 const val ACTION_SKIP = "com.goodnight.action.SKIP"
 const val ACTION_RESTART_PHASE = "com.goodnight.action.RESTART_PHASE"
 
+/** v2.1 Task 7:绑定/解绑当前工作段的任务(计时页 chip);null 用哨兵 [NO_TASK_ID] 表达 */
+const val ACTION_SET_TASK = "com.goodnight.action.SET_TASK"
+
 /** v1.10.11:通知"对号"确认(清除提醒通知) */
 const val ACTION_ACK = "com.goodnight.action.ACK"
 
@@ -18,3 +21,7 @@ const val EXTRA_PROFILE_ID = "profile_id"
 const val EXTRA_WORK_MILLIS = "work_millis"
 const val EXTRA_REST_MILLIS = "rest_millis"
 const val EXTRA_COUNT_UP = "count_up"
+
+/** 任务 id 的 intent extra;任务 id 自增且从 1 起,故 -1 可安全表示「不绑定」 */
+const val EXTRA_TASK_ID = "task_id"
+const val NO_TASK_ID = -1L

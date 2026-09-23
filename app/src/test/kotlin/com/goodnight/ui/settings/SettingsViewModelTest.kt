@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -91,5 +92,28 @@ class SettingsViewModelTest {
         g.engine.restore(snap(EngineStatus.PAUSED, profileId = only.id))
         assertTrue(vm.deleteProfile(only)) // 暂停中的活跃配置:先 reset 再删
         assertEquals(1, g.profileRepo.profiles.first().size)
+    }
+
+    /**
+     * v2.1 Task 9:恢复计数含任务数 —— 走真实文件 Uri 的 restoreFrom 路径(界面「已从备份恢复 N 条记录」)。
+     * 同时验证更高版本文件在界面层降级为失败提示(返回 null),不写库。
+     */
+    @Test fun restoreCountIncludesTasksAndRejectsNewerVersion() = runTest {
+        // 文件库:restoreFrom 走 SAF 读流 + 事务,与真机路径一致(见 AppGraph 头注)
+        val g = AppGraph(ctx, useInMemoryDb = false, storeFileName = "sv_restore")
+        g.bootstrap()
+        val vm = SettingsViewModel(g)
+        val v2 = """{"version":2,"exportedAt":1,"profiles":[],"dailyTotals":[],
+            "tasks":[{"id":1,"title":"写周报","done":0,"createdAt":1,"doneAt":null,"sortOrder":1}],
+            "focusSessions":[{"id":1,"profileId":1,"startAt":1,"endAt":2,"taskId":1}]}"""
+        val good = java.io.File(ctx.cacheDir, "restore-v2.json").apply { writeText(v2) }
+        assertEquals(2, vm.restoreFrom(android.net.Uri.fromFile(good))) // 1 任务 + 1 段
+        assertEquals("写周报", g.taskRepo.titleById(1L))
+        assertEquals(1L, g.db.focusSessionDao().getAll().single().taskId)
+
+        val v3 = """{"version":3,"exportedAt":1,"profiles":[],"dailyTotals":[],"tasks":[],"focusSessions":[]}"""
+        val future = java.io.File(ctx.cacheDir, "restore-v3.json").apply { writeText(v3) }
+        assertNull(vm.restoreFrom(android.net.Uri.fromFile(future)))
+        assertEquals("写周报", g.taskRepo.titleById(1L)) // 库未被未来版本文件改动
     }
 }

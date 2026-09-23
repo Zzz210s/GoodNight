@@ -11,12 +11,14 @@ import com.goodnight.data.DailyTotalRepository
 import com.goodnight.data.ProfileRepository
 import com.goodnight.data.RuntimeStateStore
 import com.goodnight.data.SettingsRepository
+import com.goodnight.data.TaskRepository
 import com.goodnight.data.db.GoodNightDatabase
 import com.goodnight.timer.SystemTimeProvider
 import com.goodnight.timer.TimerEngine
 import com.goodnight.ui.home.HomeViewModel
 import com.goodnight.ui.report.ReportViewModel
 import com.goodnight.ui.settings.SettingsViewModel
+import com.goodnight.ui.tasks.TaskListViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,6 +50,7 @@ class AppGraph(
 
     val profileRepo = ProfileRepository(db.profileDao(), time)
     val totalsRepo = DailyTotalRepository(db, db.dailyTotalDao(), db.focusSessionDao(), time)
+    val taskRepo = TaskRepository(db)
 
     private val ds = PreferenceDataStoreFactory.create(scope = appScope) {
         context.preferencesDataStoreFile(storeFileName)
@@ -76,6 +79,7 @@ class AppGraph(
         initializer { HomeViewModel(this@AppGraph) }
         initializer { SettingsViewModel(this@AppGraph) }
         initializer { ReportViewModel(this@AppGraph) }
+        initializer { TaskListViewModel(this@AppGraph) }
     }
 
     // #3:首装不再种默认配置,空库由主页空态引导;bootstrap 只负责引擎冷启动恢复

@@ -3,17 +3,18 @@ package com.goodnight.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.goodnight.data.db.ProfileEntity
-import com.goodnight.data.mergeSessions
+import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
+import com.goodnight.service.TimerCommands
 import com.goodnight.timer.EnginePolicy
 import com.goodnight.timer.PolicyAction
 import com.goodnight.timer.RuntimeSnapshot
 import com.goodnight.timer.TimeProvider
 import java.time.LocalDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -31,16 +32,7 @@ data class HomeUiState(
     val days: Map<LocalDate, Long> = emptyMap(),
 )
 
-data class DayDetailRow(
-    val profileName: String,
-    val millis: Long,
-    val index: Int,
-    /** v1.3 #6:当日该时钟各段 [startAt..endAt](墙钟 ms,升序),供详情小行展示 */
-    val sessions: List<Pair<Long, Long>> = emptyList(),
-)
-
-data class DayDetailUi(val date: LocalDate, val totalMillis: Long, val rows: List<DayDetailRow>)
-
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(val graph: AppGraph) : ViewModel() {
     val time: TimeProvider get() = graph.time
     private val today: LocalDate = LocalDate.now()
@@ -69,54 +61,46 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
     val selectedDay: StateFlow<LocalDate?> = _selectedDay.asStateFlow()
     fun selectDay(d: LocalDate?) { _selectedDay.value = d }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     val dayDetail: StateFlow<DayDetailUi?> = _selectedDay
-        .flatMapLatest { day ->
-            if (day == null) flowOf(null)
-            else graph.totalsRepo.let { repo ->
-                // 以选中日总额为键驱动重查:dayTotals 是 Room 失效通知流,新增记录后会重发,
-                // 每次变化重新查询 breakdownByDate,避免选中期间卡片停留在旧总额上
-                repo.dayTotals(from)
-                    .map { totals -> totals.firstOrNull { it.date == day.toString() }?.total ?: 0L }
-                    .distinctUntilChanged()
-                    .map { repo.breakdownByDate(day.toString()) }
-                    .combine(graph.profileRepo.profiles) { dailyRows, profiles ->
-                        val zone = java.time.ZoneId.systemDefault()
-                        val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
-                        val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-                        val known = profiles.associateBy { it.id }
-                        // v1.10.8:有段落的配置——行合计 = 该行时间段之和(同一份数据);
-                        // 已删除配置的段落直接不参与(不再出现"已删除配置"行)。
-                        val grouped = repo.sessionsBetween(start, end)
-                            .filter { it.profileId in known.keys }
-                            .groupBy { it.profileId }
-                        val fromSessions = grouped.map { (pid, ses) ->
-                            val spans = mergeSessions(ses.map { it.startAt to it.endAt })
-                            DayDetailRow(
-                                profileName = known.getValue(pid).name,
-                                millis = spans.sumOf { it.second - it.first },
-                                index = 0,
-                                sessions = spans,
-                            )
-                        }
-                        // 无段落但有历史合计的(旧版本数据/计时进行中的检查点):保留合计,无时间段
-                        val legacy = dailyRows
-                            .filter { it.profileId in known.keys && it.profileId !in grouped.keys && it.total > 0 }
-                            .map { r ->
-                                DayDetailRow(
-                                    profileName = known.getValue(r.profileId).name,
-                                    millis = r.total,
-                                    index = 0,
-                                    sessions = emptyList(),
-                                )
-                            }
-                        val rows = (fromSessions + legacy).sortedByDescending { it.millis }
-                            .mapIndexed { i, r -> r.copy(index = i) }
-                        DayDetailUi(date = day, totalMillis = rows.sumOf { it.millis }, rows = rows)
-                    }
-            }
-        }
+        .flatMapLatest { day -> if (day == null) flowOf(null) else dayDetailFlow(graph, day, from) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // ---- v2.1 Task 7:计时页当前任务 chip ----
+
+    /** 当前工作段绑定的任务(未绑定 = null);绑定随运行态持久化,杀进程/重启后仍在 */
+    val currentTask: StateFlow<TaskEntity?> = graph.engine.snapshot
+        .map { it?.taskId }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> if (id == null) flowOf(null) else graph.taskRepo.observeById(id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** 选择器列表:仅进行中任务(已完成的不参与绑定) */
+    val activeTasks: StateFlow<List<TaskEntity>> = graph.taskRepo.observeActive()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * 选择器实际展示的列表 = 进行中任务 + 当前绑定任务(若它已不在进行中列表里,如刚被归档)。
+     * 否则会出现"chip 显示某任务、列表里哪一项都不打勾"的误导。
+     * 任务已被删时 [currentTask] 为 null(查不到实体),此处不补行 —— 与 chip 的「未绑定」文案同口径。
+     */
+    val pickerTasks: StateFlow<List<TaskEntity>> = combine(activeTasks, currentTask) { active, bound ->
+        if (bound != null && active.none { it.id == bound.id }) active + bound else active
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _taskPickerOpen = MutableStateFlow(false)
+    val taskPickerOpen: StateFlow<Boolean> = _taskPickerOpen.asStateFlow()
+    fun onOpenTaskPicker() { _taskPickerOpen.value = true }
+    fun onDismissTaskPicker() { _taskPickerOpen.value = false }
+
+    /**
+     * 选择/解绑当前任务(null = 不绑定)。计时中切换由引擎按切点切段(§3 语义,引擎已实现);
+     * 命令走 [TimerCommands] -> 服务 -> [com.goodnight.service.EngineCoordinator] —— 引擎的唯一
+     * 驱动者、所有命令共用同一把 mutex,不直接调引擎(与 Task 6 删除路径的 bypass 相反)。
+     */
+    fun onPickTask(id: Long?) {
+        _taskPickerOpen.value = false
+        TimerCommands.setTask(graph.appContext, id)
+    }
 
     /** @return true 时调用方需发 TimerCommands.restartPhase */
     suspend fun selectProfile(p: ProfileEntity): Boolean {

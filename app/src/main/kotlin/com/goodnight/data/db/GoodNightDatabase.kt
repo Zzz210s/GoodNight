@@ -7,11 +7,16 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [ProfileEntity::class, DailyTotalEntity::class, FocusSessionEntity::class], version = 3, exportSchema = false)
+@Database(
+    entities = [ProfileEntity::class, DailyTotalEntity::class, FocusSessionEntity::class, TaskEntity::class],
+    version = 4,
+    exportSchema = false,
+)
 abstract class GoodNightDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun dailyTotalDao(): DailyTotalDao
     abstract fun focusSessionDao(): FocusSessionDao
+    abstract fun taskDao(): TaskDao
 
     companion object {
         /**
@@ -37,12 +42,32 @@ abstract class GoodNightDatabase : RoomDatabase() {
         }
 
         /**
+         * v3 -> v4(v2.1 Task 1):新增 `task` 表与 `focus_session.taskId` 可空列,纯增量。
+         *
+         * 不加外键:SQLite 无法用 ALTER 给既有表加外键(只能重建表,风险更高),
+         * 「删除任务时把引用置空」由应用层在同一事务内保证(见 TaskRepository)。
+         * DDL 全部 IF NOT EXISTS,迁移可重复执行;`taskId` 无默认值 -> 旧段自动为 NULL(未绑定)。
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `task` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`title` TEXT NOT NULL, `done` INTEGER NOT NULL DEFAULT 0, " +
+                        "`createdAt` INTEGER NOT NULL, `doneAt` INTEGER, `sortOrder` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_task_done_sortOrder` ON `task` (`done`, `sortOrder`)")
+                db.execSQL("ALTER TABLE `focus_session` ADD COLUMN `taskId` INTEGER")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_focus_session_taskId` ON `focus_session` (`taskId`)")
+            }
+        }
+
+        /**
          * v1.11.2:[name] 可覆盖库文件名 —— 单元测试用它给每个测试类独立的库文件,
          * 避免同一 Robolectric 沙箱里多个测试类共享 "goodnight.db" 造成的 SQLITE_BUSY / 数据串扰。
          */
         fun build(context: Context, name: String = "goodnight.db"): GoodNightDatabase =
             Room.databaseBuilder(context, GoodNightDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

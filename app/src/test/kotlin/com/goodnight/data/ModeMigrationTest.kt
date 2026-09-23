@@ -4,14 +4,17 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.goodnight.data.db.FocusSessionEntity
 import com.goodnight.data.db.GoodNightDatabase
 import com.goodnight.data.db.ProfileDao
 import com.goodnight.data.db.ProfileMode
+import com.goodnight.data.db.TaskEntity
 import com.goodnight.timer.TimeProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,6 +25,9 @@ import org.robolectric.annotation.Config
  * Task 6 / #10:schema v1 -> v2(mode 列)迁移测试。仓库无既有 migration 测试先例,
  * 故手工构造 v1 库文件(Room v1 生成的原始 DDL,取自迁移前 generated schema),
  * 插入一行数据后经注册的 MIGRATION_1_2 升级打开,断言数据保留且 mode 补 0。
+ *
+ * v2.1 Task 1:GoodNightDatabase.build 已注册 MIGRATION_3_4,本测试随之覆盖 v1 -> v4 全链
+ * (1->2->3->4 一次跑完),断言 profile/daily_total 逐值保留、focus_session/task 可用。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = android.app.Application::class)
@@ -67,7 +73,7 @@ class ModeMigrationTest {
         assertEquals(ProfileMode.COUNTUP, flowMode)
     }
 
-    /** 旧库升级:手工建 v1 schema + 插一行 -> 经注册迁移开 v2,行保留且 mode=0 */
+    /** 旧库升级:手工建 v1 schema + 插一行 -> 经注册迁移开 v4,行保留且 mode=0 */
     @Test fun upgradeV1KeepsRowsAndDefaultsModeToCountdown() = runTest {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val path = ctx.getDatabasePath("goodnight.db").absolutePath
@@ -83,8 +89,10 @@ class ModeMigrationTest {
             "VALUES ('2026-08-30', 1, 3600000, 1700000001000)")
         v1.close()
 
-        // GoodNightDatabase.build 内含 addMigrations(MIGRATION_1_2)
+        // GoodNightDatabase.build 内含 addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         db = GoodNightDatabase.build(ctx)
+        // v2.1 Task 1:迁移链已延伸到 v4(1->2->3->4 一次跑完),user_version 落在 4
+        assertEquals(4, db!!.openHelper.writableDatabase.version)
         val repo = ProfileRepository(db!!.profileDao(), time)
         val rows = repo.profiles.first()
         assertEquals("旧行保留且仅一行", 1, rows.size)
@@ -105,5 +113,20 @@ class ModeMigrationTest {
         assertEquals("2026-08-30", totals.single().date)
         assertEquals(1L, totals.single().profileId)
         assertEquals(3_600_000L, totals.single().total)
+
+        // focus_session 表由 2->3 建出、3->4 增出 taskId:写入读回逐值一致,升级来的段未绑定任务
+        db!!.focusSessionDao().insertAll(
+            listOf(FocusSessionEntity(profileId = old.id, startAt = 1700000002000, endAt = 1700000003000))
+        )
+        val segs = db!!.focusSessionDao().getAll()
+        assertEquals(1, segs.size)
+        assertEquals(old.id, segs.single().profileId)
+        assertEquals(1700000002000L, segs.single().startAt)
+        assertEquals(1700000003000L, segs.single().endAt)
+        assertNull("v1 升级来的段默认未绑定任务", segs.single().taskId)
+        // task 表(3->4 新建)可用
+        val newTask = db!!.taskDao().insert(TaskEntity(title = "写周报", createdAt = 1700000004000, sortOrder = 0))
+        assertTrue(newTask > 0)
+        assertEquals(1, db!!.taskDao().observeActive().first().size)
     }
 }
