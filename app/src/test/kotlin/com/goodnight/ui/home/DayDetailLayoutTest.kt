@@ -29,8 +29,15 @@ import org.robolectric.annotation.GraphicsMode
  * 修复轮 3(顺带项):所有间距(卡片左内边距 / 标识列宽 / 标识与时间列的间距 / 两列间距)
  * 一律**从节点实测反推**,不再写 18f/12f/10f —— 将来调间距时断言不会拿旧常量算出
  * "期望 145 实测 86" 这类误导性差值,而是直接报出实测与期望的各自来源。
- * 格宽用**超宽名字节点**的实测宽反推:名字被格宽截断时节点宽 == 格宽
- * (Pixel_8 AVD dump 复核过:名字节点宽 341px = 整格宽)。
+ *
+ * 修复轮 4:只用**超宽名字节点**反推格宽判不出变异 —— 名字超格宽时节点宽 == 格宽,
+ * 而那三格在「等分」与旧写法下取值相同。补测**未绑定格**(短内容,自然宽只有份额的
+ * 六成左右)的格宽,见 [unboundCellAlsoTakesItsEvenShare]。
+ *
+ * `onRoot()` 当作行右沿的前提:本用例把 `DayDetailCard` 直接作根内容且不传 modifier,
+ * 卡片自身 `fillMaxWidth()` 而根部无内边距,故根节点(= 屏幕)右沿 == 卡片右沿 == 行右沿。
+ * 一旦改成渲染带左右内边距的容器(`HomeScreen` 里就是那样),这条等式不再成立,
+ * 必须改从卡片自身推导。
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE) // 真实字体度量(legacy 模式下每字符只算 1px)
@@ -44,7 +51,7 @@ class DayDetailLayoutTest {
     private val longName = "读论文与写摘要笔记与整理参考文献清单并归档"
     private val longName2 = "整理季度回顾材料并同步给项目组同事"
 
-    /** 四段同属上午:长名任务 / 长名任务 2 / 未绑定 / 长名任务 -> 两行两列,三处名字都超格宽 */
+    /** 四段同属上午:长名任务 / 长名任务 2 / 未绑定 / 长名任务 -> 两行两列,行 2 列 1 是唯一的短内容格 */
     private fun detail(): DayDetailUi {
         val titles = mapOf(1L to longName, 2L to longName2)
         fun row(startMin: Long, endMin: Long, task: Long?) = FocusSessionEntity(
@@ -70,6 +77,28 @@ class DayDetailLayoutTest {
     /** 同名节点按组合顺序取(行 1 列 1、行 2 列 2) */
     private fun nameNodes(title: String) = rule.onAllNodesWithText(title, useUnmergedTree = true)
 
+    /** 实测反推的几何:不含任何写死的 18/12/10;detail 只用于打印失败现场 */
+    private class Layout(val rootRight: Float, val spanGap: Float, val share: Float, val detail: String) {
+        override fun toString() = "$detail spanGap=$spanGap share=$share rootRight=$rootRight"
+    }
+
+    private fun layout(): Layout {
+        val rootRight = rule.onRoot().getUnclippedBoundsInRoot().right.value // 前提见类 KDoc
+        val period = bounds("上午")
+        val time1 = bounds("09:00 ~ 09:30")
+        val c1 = nameNodes(longName)[0].getUnclippedBoundsInRoot()
+        val c2 = nameNodes(longName2)[0].getUnclippedBoundsInRoot()
+        val leftPad = period.left.value // 卡片左内边距 = 首个内容节点(标识文本)左沿
+        val periodColW = period.width.value // 标识列宽(该 Text 自带 width 修饰)
+        val periodGap = time1.left.value - period.right.value // 标识列 -> 时间列
+        val spanGap = c2.left.value - c1.right.value // 两列之间(两格都被名字占满,节点边缘即格边缘)
+        val share = (rootRight - leftPad - periodColW - periodGap - spanGap) / 2f
+        return Layout(
+            rootRight, spanGap, share,
+            "leftPad=$leftPad periodColW=$periodColW periodGap=$periodGap",
+        )
+    }
+
     /** 旧行为下这条会红:两行名字长度不同 -> 格宽不同 -> 第二列起点不同(548px vs 631px) */
     @Test fun secondColumnStartsAtTheSameXOnEveryRow() {
         render()
@@ -85,30 +114,42 @@ class DayDetailLayoutTest {
     /** 两列等分:每个格宽 == 剩余主轴上宽的一半,与名字长短无关(三处超宽名字节点都查) */
     @Test fun columnsSplitTheRowEvenly() {
         render()
-        val rootRight = rule.onRoot().getUnclippedBoundsInRoot().right.value
-        val period = bounds("上午")
-        val r0c1Time = bounds("09:00 ~ 09:30")
+        val m = layout()
         val c1 = nameNodes(longName)[0].getUnclippedBoundsInRoot()
         val c2 = nameNodes(longName2)[0].getUnclippedBoundsInRoot()
         val c3 = nameNodes(longName)[1].getUnclippedBoundsInRoot()
-        // 全部从实测节点反推,不含任何写死的 18/12/10
-        val leftPad = period.left.value // 卡片左内边距 = 标识文本左沿(首个内容节点)
-        val periodColW = period.width.value // 标识列宽(该 Text 自带 width 修饰)
-        val periodGap = r0c1Time.left.value - period.right.value // 标识列 -> 时间列
-        val spanGap = c2.left.value - c1.right.value // 两列之间(两格都被名字占满,故可直接减节点边缘)
-        val expected = (rootRight - leftPad - periodColW - periodGap - spanGap) / 2f
-        println(
-            "W4b cellW=${c1.width.value}/${c2.width.value}/${c3.width.value} expected=$expected " +
-                "leftPad=$leftPad periodColW=$periodColW periodGap=$periodGap spanGap=$spanGap " +
-                "c1=${c1.left}..${c1.right} c2=${c2.left}..${c2.right} rootRight=$rootRight",
-        )
+        println("W4b cellW=${c1.width.value}/${c2.width.value}/${c3.width.value} $m")
         listOf("行1列1" to c1, "行1列2" to c2, "行2列2" to c3).forEach { (label, node) ->
             assertEquals(
-                "$label 格宽 ${node.width.value} 应等分剩余宽(实测反推期望 $expected)",
-                expected, node.width.value, 1f,
+                "$label 格宽 ${node.width.value} 应等分剩余宽(实测反推份额 ${m.share},${m.detail})",
+                m.share, node.width.value, 1f,
             )
         }
-        assertEquals("最后一格右沿 ${c2.right} 应贴行右沿 $rootRight", rootRight, c2.right.value, 1f)
+        assertEquals("最后一格右沿 ${c2.right} 应贴行右沿 ${m.rootRight}", m.rootRight, c2.right.value, 1f)
         assertTrue("第二列起点 ${c2.left} 应在第一列 ${c1.left} 右侧", c2.left.value > c1.left.value)
+    }
+
+    /**
+     * 行 2 列 1 是未绑定段:格内只有一行时间文本,自然宽 ≈ 份额的六成 —— 旧写法
+     * `weight(1f, fill = false) + widthIn(min)` 会把它收缩到内容宽(格宽随内容长短变化),
+     * 等分固定宽则仍给它整份。这是本文件里唯一判别得动该变异的用例:
+     * 已绑定的三格名字都超格宽(节点宽 == 格宽 == 份额),两种写法取值相同。
+     *
+     * 格宽由同行两格的**时间文本左沿差**反推(两格的时间文本都左对齐于各自格首,
+     * 故左沿差 = 格宽 + 两格间距),不依赖任何名字节点。
+     */
+    @Test fun unboundCellAlsoTakesItsEvenShare() {
+        render()
+        val m = layout()
+        val r1c1Time = bounds("10:00 ~ 10:30")
+        val r1c2Time = bounds("10:30 ~ 11:00")
+        val cellW = r1c2Time.left.value - r1c1Time.left.value - m.spanGap
+        println("W4c unboundCellW=$cellW timeW=${r1c1Time.width.value} $m")
+        assertTrue(
+            "前提:未绑定格的时间文本自然宽 ${r1c1Time.width.value} 应明显窄于份额 ${m.share}," +
+                "否则这档判别不出旧写法",
+            r1c1Time.width.value < m.share - 4f,
+        )
+        assertEquals("未绑定格宽 $cellW 也应等于等分份额 ${m.share}(${m.detail})", m.share, cellW, 1f)
     }
 }
