@@ -152,4 +152,8 @@
     <string name="task_delete">删除任务</string>
     <string name="task_drag">长按拖动排序</string>
     <string name="task_done_at">完成于 %1$s</string>
+    <!-- task chip (v2.1) -->
+    <string name="task_unbound">未绑定任务</string>
+    <string name="task_picker_title">选择任务</string>
+    <string name="task_picker_unbind">不绑定</string>
 </resources>

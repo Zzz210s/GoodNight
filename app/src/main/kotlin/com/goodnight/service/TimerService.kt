@@ -145,4 +145,5 @@ internal fun Intent.toTimerCommand(action: String) = TimerCommand(
     workMillis = getLongExtra(EXTRA_WORK_MILLIS, 0L),
     restMillis = getLongExtra(EXTRA_REST_MILLIS, 0L),
     countUp = getBooleanExtra(EXTRA_COUNT_UP, false),
+    taskId = getLongExtra(EXTRA_TASK_ID, NO_TASK_ID).takeIf { it != NO_TASK_ID },
 )

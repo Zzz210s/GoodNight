@@ -19,6 +19,12 @@ class TaskRepository(private val db: GoodNightDatabase) {
     fun observeActive(): Flow<List<TaskEntity>> = dao.observeActive()
     fun observeDone(): Flow<List<TaskEntity>> = dao.observeDone()
 
+    /** v2.1 Task 7:计时页 chip 的当前绑定(含已完成任务;id 已删/未知时发 null) */
+    fun observeById(id: Long): Flow<TaskEntity?> = dao.observeById(id)
+
+    /** v2.1 Task 7:每日详情把段的 taskId 解析成任务名(重命名后卡片即时刷新) */
+    fun observeAll(): Flow<List<TaskEntity>> = dao.observeAll()
+
     /** 标题去首尾空白后入库;空/纯空白/超 [MAX_TITLE] 字拒绝(返回 null),调用方据此提示 */
     suspend fun create(title: String, now: Long): Long? {
         val t = title.trim()

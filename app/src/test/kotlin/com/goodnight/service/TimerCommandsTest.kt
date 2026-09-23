@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +26,18 @@ class TimerCommandsTest {
         assertFalse("倒计时缺省不得携带正计时信号", down.getBooleanExtra(EXTRA_COUNT_UP, false))
         val up = TimerCommands.startIntent(ctx, 3L, 60_000L, 20_000L, countUp = true)
         assertTrue("正计时须显式携带 count_up", up.getBooleanExtra(EXTRA_COUNT_UP, false))
+    }
+
+    /** v2.1 Task 7:任务切换命令携带任务 id(「不绑定」用哨兵值表达 null,解析回 null) */
+    @Test fun setTaskIntentCarriesTaskId() {
+        val bound = TimerCommands.setTaskIntent(ctx, 42L)
+        assertEquals(ACTION_SET_TASK, bound.action)
+        assertEquals(42L, bound.getLongExtra(EXTRA_TASK_ID, NO_TASK_ID))
+        val unbound = TimerCommands.setTaskIntent(ctx, null)
+        assertEquals(ACTION_SET_TASK, unbound.action)
+        assertEquals(NO_TASK_ID, unbound.getLongExtra(EXTRA_TASK_ID, NO_TASK_ID))
+        assertNull(unbound.toTimerCommand(ACTION_SET_TASK).taskId)
+        assertEquals(42L, bound.toTimerCommand(ACTION_SET_TASK).taskId)
     }
 
     /** Task 7:暂停中重开(改时长/换配置)同样携带目标模式,服务据此以新模式重开会话 */

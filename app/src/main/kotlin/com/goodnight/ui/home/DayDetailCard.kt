@@ -31,10 +31,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.goodnight.data.DayPeriod
 import com.goodnight.data.dayPeriodOf
-import com.goodnight.data.groupByPeriod
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -86,6 +86,8 @@ private fun ProfileSection(row: DayDetailRow) {
         }
         // v1.10:各段 开始~结束(时:分)。左侧固定单列大时段标识(纯文字,无色块);
         // 标识右侧为双列时间段,单行不换行。
+        // v2.1 Task 7:显示走 [DayDetailRow.taskSpans](按任务切点切开),每段时段后追加任务名;
+        // 未绑定段不显示任务名。区间集合与行合计仍由 [DayDetailRow.sessions] 决定。
         if (row.sessions.isNotEmpty()) {
             val zone = ZoneId.systemDefault()
             // v1.10.10:列宽按**当前字体大小实测**得出(而不是写死 dp)——大字号/系统字体放大时
@@ -96,7 +98,7 @@ private fun ProfileSection(row: DayDetailRow) {
             val periodColW = with(density) { measurer.measure("凌晨", labelStyle).size.width.toDp() } + 4.dp
             val spanColW = with(density) { measurer.measure("00:00 ~ 00:00", labelStyle).size.width.toDp() } + 2.dp
             Column(Modifier.fillMaxWidth().padding(start = 18.dp, top = 2.dp)) {
-                groupByPeriod(row.sessions, zone).forEach { (period, spans) ->
+                groupSpansByPeriod(row.taskSpans, zone).forEach { (period, spans) ->
                     spans.chunked(2).forEachIndexed { lineIdx, pair ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -108,10 +110,12 @@ private fun ProfileSection(row: DayDetailRow) {
                                 modifier = Modifier.width(periodColW),
                             )
                             Spacer(Modifier.width(PERIOD_GAP_W))
-                            SpanText(pair[0], zone, Modifier.widthIn(min = spanColW))
+                            // fill=false + weight:短文本维持既有自然宽(与旧排版一致),
+                            // 追加任务名变长时最多占半行,超出由省略号截断而不撑破行宽
+                            SpanText(pair[0], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
                             if (pair.size > 1) {
                                 Spacer(Modifier.width(SPAN_GAP_W))
-                                SpanText(pair[1], zone, Modifier.widthIn(min = spanColW))
+                                SpanText(pair[1], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
                             }
                         }
                     }
@@ -121,16 +125,18 @@ private fun ProfileSection(row: DayDetailRow) {
     }
 }
 
-/** 单条时间段文本:HH:mm ~ HH:mm(单行不换行) */
+/** 单条时间段文本:HH:mm ~ HH:mm(绑定了任务时追加「· 任务名」);单行不换行,超宽省略号 */
 @Composable
-private fun SpanText(seg: Pair<Long, Long>, zone: ZoneId, modifier: Modifier = Modifier) {
+private fun SpanText(span: DaySpan, zone: ZoneId, modifier: Modifier = Modifier) {
+    val time = HHmm.format(Instant.ofEpochMilli(span.start).atZone(zone)) + " ~ " +
+        HHmm.format(Instant.ofEpochMilli(span.end).atZone(zone))
     Text(
-        HHmm.format(Instant.ofEpochMilli(seg.first).atZone(zone)) + " ~ " +
-            HHmm.format(Instant.ofEpochMilli(seg.second).atZone(zone)),
+        if (span.taskName == null) time else "$time · ${span.taskName}",
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         softWrap = false,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier,
     )
 }

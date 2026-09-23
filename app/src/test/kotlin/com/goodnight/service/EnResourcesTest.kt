@@ -21,5 +21,7 @@ class EnResourcesTest {
         assertEquals("All-time totals", ctx.getString(R.string.total_lifetime))
         assertEquals("This week: 30m", ctx.getString(R.string.report_week_body, "30m"))
         assertEquals("1h 30m", ctx.getString(R.string.duration_hm, 1, 30))
+        // v2.1 Task 7:计时页任务 chip 的未绑定文案(zh 对照在 HomeTaskChipTest)
+        assertEquals("No task", ctx.getString(R.string.task_unbound))
     }
 }

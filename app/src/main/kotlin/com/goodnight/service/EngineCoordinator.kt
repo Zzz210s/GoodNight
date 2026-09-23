@@ -20,6 +20,8 @@ data class TimerCommand(
     val workMillis: Long = 0L,
     val restMillis: Long = 0L,
     val countUp: Boolean = false,
+    /** v2.1 Task 7:SET_TASK 的任务 id(null = 不绑定) */
+    val taskId: Long? = null,
 )
 
 /**
@@ -152,6 +154,7 @@ class EngineCoordinator(private val graph: AppGraph) {
             }
             ACTION_SKIP -> graph.engine.skip()
             ACTION_RESTART_PHASE -> graph.engine.restartPhase(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
+            ACTION_SET_TASK -> graph.engine.setTask(cmd.taskId)
         }
     }
 

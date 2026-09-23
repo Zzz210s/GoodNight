@@ -40,6 +40,7 @@ import com.goodnight.timer.EngineStatus
 import com.goodnight.ui.heatmap.Heatmap
 import com.goodnight.ui.heatmap.buildHeatmapModel
 import com.goodnight.ui.report.ReportRange
+import com.goodnight.ui.tasks.TaskPicker
 import com.goodnight.ui.theme.MotionTokens
 import com.goodnight.ui.theme.rememberAnimationsEnabled
 import java.time.LocalDate
@@ -58,6 +59,10 @@ fun HomeScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
     val selectedDay by vm.selectedDay.collectAsStateWithLifecycle()
     val dayDetail by vm.dayDetail.collectAsStateWithLifecycle()
+    // v2.1 Task 7:当前任务 chip 的文案与选择器
+    val currentTask by vm.currentTask.collectAsStateWithLifecycle()
+    val activeTasks by vm.activeTasks.collectAsStateWithLifecycle()
+    val taskPickerOpen by vm.taskPickerOpen.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     // Task 7 / #10:数字位 = 倒计时剩余 / 正计时已走(计到快照,暂停定格)。
@@ -113,7 +118,8 @@ fun HomeScreen(
             Modifier.weight(1f).navigationBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            TimerCard(ui, displayMillis, onStart = {
+            TimerCard(ui, displayMillis, taskTitle = currentTask?.title,
+                onTaskChipClick = { vm.onOpenTaskPicker() }, onStart = {
                 ui.profiles.firstOrNull { it.id == ui.activeProfileId }?.let { p ->
                     TimerCommands.start(
                         ctx, p.id, p.workMinutes * 60_000L, p.restMinutes * 60_000L,
@@ -153,6 +159,15 @@ fun HomeScreen(
             }
 
     }
+        // v2.1 Task 7:任务选择器(进行中任务 + 「不绑定」);选中即发 SET_TASK 命令
+        if (taskPickerOpen) {
+            TaskPicker(
+                tasks = activeTasks,
+                selectedId = ui.snap?.taskId,
+                onPick = vm::onPickTask,
+                onDismiss = vm::onDismissTaskPicker,
+            )
+        }
     }
 }
 

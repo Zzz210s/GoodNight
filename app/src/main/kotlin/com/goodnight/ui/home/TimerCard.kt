@@ -43,6 +43,7 @@ import com.goodnight.timer.DurationFormat
 import com.goodnight.timer.Phase
 import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
+import com.goodnight.ui.tasks.TaskChip
 import com.goodnight.ui.theme.MotionTokens
 import com.goodnight.ui.theme.rememberAnimationsEnabled
 
@@ -52,6 +53,8 @@ import com.goodnight.ui.theme.rememberAnimationsEnabled
 internal fun TimerCard(
     ui: HomeUiState,
     displayMillis: Long,
+    taskTitle: String?,
+    onTaskChipClick: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -125,6 +128,10 @@ internal fun TimerCard(
                 onSkip = { act(onSkip) },
                 onStop = { act(onStop) },
             )
+            }
+            // v2.1 Task 7:左上角当前任务 chip(未绑定 = 「未绑定任务」);空闲无段可绑时禁点
+            Row(Modifier.align(Alignment.TopStart).padding(12.dp)) {
+                TaskChip(taskTitle = taskTitle, enabled = snap != null, onClick = onTaskChipClick)
             }
             // v1.9.9:右上角同排 [相位图标][循环徽标];相位图标始终显示(空闲/工作/休息),循环徽标仅倒计时显示
             Row(
