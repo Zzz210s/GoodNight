@@ -13,7 +13,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -68,17 +67,35 @@ internal fun TimerCard(
         ui.profiles.firstOrNull { it.id == ui.activeProfileId }?.mode == ProfileMode.COUNTUP
     val animationsOn = rememberAnimationsEnabled()
     Card(Modifier.fillMaxWidth()) {
-        Box {
-            val phaseRes = when {
-                snap == null -> R.string.state_idle
-                snap.phase == Phase.WORK -> R.string.state_work
-                else -> R.string.state_rest
+        val phaseRes = when {
+            snap == null -> R.string.state_idle
+            snap.phase == Phase.WORK -> R.string.state_work
+            else -> R.string.state_rest
+        }
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // v2.1 Task 7(修复轮 2):顶部横带 = 当前任务 chip(左)+ [相位图标][循环徽标](右)。
+            // chip 在**内容流内**,与居中的大数字分属两行 —— 重叠在结构上不可能发生,不再依赖
+            // "chip 限宽 < 大数字左沿"的几何余量(该余量会被 360dp 屏宽、系统字号放大、
+            // 8 字符大数字(ms 累计分钟无上限)分别吃掉)。weight(1f, fill = false) 与等分
+            // Spacer 配对:名字再长也只占半行,超出由省略号截断,右侧徽标不被挤压。
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TaskChip(
+                    taskTitle = taskTitle,
+                    enabled = snap != null,
+                    onClick = onTaskChipClick,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.weight(1f))
+                PhaseIndicator(phaseRes)
+                if (!countUpActive) {
+                    Spacer(Modifier.width(10.dp))
+                    CycleBadge(count = snap?.cycleCount ?: 0, animationsOn = animationsOn)
+                }
             }
-            Column(
-                Modifier.padding(16.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
             // #3 空态引导:无配置时倒计时数字位换文案(数字必为 00:00,无意义),
             // 开始键维持 disabled(activeProfileId == -1),另提供直达时钟管理的按钮
             // v1.1 #7:空态 ↔ 计时内容交叉淡入/展开;关闭动画直切(M1 门控)
@@ -128,22 +145,6 @@ internal fun TimerCard(
                 onSkip = { act(onSkip) },
                 onStop = { act(onStop) },
             )
-            }
-            // v2.1 Task 7:左上角当前任务 chip(未绑定 = 「未绑定任务」);空闲无段可绑时禁点
-            Row(Modifier.align(Alignment.TopStart).padding(12.dp)) {
-                TaskChip(taskTitle = taskTitle, enabled = snap != null, onClick = onTaskChipClick)
-            }
-            // v1.9.9:右上角同排 [相位图标][循环徽标];相位图标始终显示(空闲/工作/休息),循环徽标仅倒计时显示
-            Row(
-                Modifier.align(Alignment.TopEnd).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PhaseIndicator(phaseRes)
-                if (!countUpActive) {
-                    Spacer(Modifier.width(10.dp))
-                    CycleBadge(count = snap?.cycleCount ?: 0, animationsOn = animationsOn)
-                }
-            }
         }
     }
 }

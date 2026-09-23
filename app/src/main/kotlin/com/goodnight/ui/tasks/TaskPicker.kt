@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -31,6 +30,9 @@ import com.goodnight.ui.morph.PathIcon
  *
  * 空闲(无工作段)时禁点:此时没有可绑定的段(引擎 `setTask` 无快照即 no-op),
  * 点了只会白拉起一次前台服务、并留下"选了却没生效"的错觉。
+ *
+ * 宽度由调用方决定:chip 在卡片内容流内与徽标同排、与大数字不同排(见 [com.goodnight.ui.home.TimerCard]),
+ * 故不再限宽 —— 名字多长都由调用方给的可用宽 + 省略号收敛,不依赖任何"屏宽/字号/数字位数"假设。
  */
 @Composable
 internal fun TaskChip(
@@ -45,22 +47,15 @@ internal fun TaskChip(
         label = {
             Text(
                 taskTitle ?: stringResource(R.string.task_unbound),
-                // labelLarge(14sp)下「未绑定任务」本身就占 101.7dp,会被 96dp 限宽截断,
-                // 故降一档到 labelMedium(12sp,与每日详情时段文本同档)
-                style = MaterialTheme.typography.labelMedium,
+                // labelLarge(14sp):chip 不再限宽,无需为迁就限宽降字号(可读性/可点性优先)
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        // 标题可能很长:限宽后由 label 省略号截断。上限必须小于「chip 左沿 -> 大数字左沿」的空隙,
-        // 否则长名字会盖住居中的倒计时首位数字。Pixel_8(density 2.625)实测:chip 左沿 74px,
-        // 大数字(六字符,如 148:41)左沿 361px -> 可用 ≈109dp;取 96dp 留 ~13dp 余量。
-        modifier = modifier.widthIn(max = CHIP_MAX_W),
+        modifier = modifier,
     )
 }
-
-/** chip 最大宽度:见 [TaskChip] 的几何说明(≤ 大数字左沿 - chip 左沿 - 余量) */
-private val CHIP_MAX_W = 96.dp
 
 /**
  * v2.1 Task 7:任务选择器 —— 任务列表 + 「不绑定」一项(当前绑定打勾)。

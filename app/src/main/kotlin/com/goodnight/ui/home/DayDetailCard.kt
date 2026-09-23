@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -97,7 +96,6 @@ private fun ProfileSection(row: DayDetailRow) {
             val labelStyle = MaterialTheme.typography.labelMedium
             val density = LocalDensity.current
             val periodColW = with(density) { measurer.measure("凌晨", labelStyle).size.width.toDp() } + 4.dp
-            val spanColW = with(density) { measurer.measure("00:00 ~ 00:00", labelStyle).size.width.toDp() } + 2.dp
             Column(Modifier.fillMaxWidth().padding(start = 18.dp, top = 2.dp)) {
                 groupSpansByPeriod(row.taskSpans, zone).forEach { (period, spans) ->
                     spans.chunked(2).forEachIndexed { lineIdx, pair ->
@@ -111,12 +109,14 @@ private fun ProfileSection(row: DayDetailRow) {
                                 modifier = Modifier.width(periodColW),
                             )
                             Spacer(Modifier.width(PERIOD_GAP_W))
-                            // fill=false + weight:短文本维持既有自然宽(与旧排版一致),
-                            // 追加任务名变长时最多占半行,超出由省略号截断而不撑破行宽
-                            SpanCell(pair[0], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
+                            // v2.1 Task 7(修复轮 2):两列**等分固定宽**(weight 1f + fill = true)。
+                            // 用 fill = false + widthIn(min) 时格宽随名字长短变化,同一卡片不同行的
+                            // 第二列起点会不一致(AVD 实测 548px vs 631px)——改成等分后第二列起点
+                            // = 标识列 + 间距 + 半格宽,与内容长度无关,行行对齐。名字在格内截断。
+                            SpanCell(pair[0], zone, Modifier.weight(1f))
                             if (pair.size > 1) {
                                 Spacer(Modifier.width(SPAN_GAP_W))
-                                SpanCell(pair[1], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
+                                SpanCell(pair[1], zone, Modifier.weight(1f))
                             }
                         }
                     }
@@ -129,7 +129,7 @@ private fun ProfileSection(row: DayDetailRow) {
 /**
  * 单个时间段单元格:第一行 HH:mm ~ HH:mm;绑定了任务时名字**另起一行**。
  * 名字与时间同行时可用宽度只剩 `整格 - 时间文本`(Pixel_8 实测 ≈133px,约 4 个汉字),
- * 常见的 "WriteReport" 类名字会被截掉一半;独立一行后用满整格宽(≈375px)。
+ * 常见的 "WriteReport" 类名字会被截掉一半;独立一行后用满整格宽(等分格宽)。
  * 名字不存在(未绑定)时只有一行,单元格高度不增加。单行 + 省略号。
  */
 @Composable
