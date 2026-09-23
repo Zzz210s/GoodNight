@@ -16,7 +16,10 @@ import kotlinx.coroutines.launch
 /** 新建/改名输入被拒的原因(文案在资源层,VM 只给原因,便于无资源单测) */
 enum class TaskInputError { BLANK, TOO_LONG }
 
-/** 删除确认载荷:[minutes] = 该任务已记录的分钟数(四舍五入到整分) */
+/**
+ * 删除确认载荷:[minutes] = 该任务已记录的分钟数(四舍五入到整分)= 已落库段落 + **在途工作段**
+ * (运行中删当前绑定任务时本段尚未落库,见 [inFlightMillisFor])。
+ */
 data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long)
 
 /**
@@ -89,7 +92,7 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    /** 弹删除确认:先取该任务已记录的分钟数(查询失败/任务已不在则不开弹窗) */
+    /** 弹删除确认:先取该任务已记录的分钟数(含在途,查询失败/任务已不在则不开弹窗) */
     fun onDeleteRequest(id: Long) {
         viewModelScope.launch {
             val title = graph.taskRepo.titleById(id) ?: return@launch
@@ -118,7 +121,14 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    /** 该任务已记录的分钟数(四舍五入到整分):删除确认文案「已记录的 N 分钟」用 */
+    /**
+     * 该任务已记录的分钟数(四舍五入到整分):删除确认文案「已记录的 N 分钟」用。
+     * = 已落库段落 + 在途工作段 —— 删除后两部分都以未绑定保留,口径必须一致。
+     */
     suspend fun recordedMinutes(id: Long): Long =
-        (graph.taskRepo.recordedMillis(id) + 30_000L) / 60_000L
+        (graph.taskRepo.recordedMillis(id) + inFlightMillis(id) + 30_000L) / 60_000L
+
+    /** 在途工作毫秒:当前绑定就是 [id] 且引擎在 WORK 段时为该段归属本任务的时长,否则 0 */
+    fun inFlightMillis(id: Long): Long =
+        graph.engine.snapshot.value?.let { inFlightMillisFor(it, id, graph.time.now()) } ?: 0L
 }

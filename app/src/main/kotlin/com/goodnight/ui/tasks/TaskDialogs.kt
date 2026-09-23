@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.goodnight.R
 import com.goodnight.data.TaskRepository
@@ -63,12 +64,12 @@ internal fun TaskInputDialog(
     )
 }
 
-/** 删除确认:文案含该任务已记录的分钟数(时间账保留为未绑定,不丢数据) */
+/** 删除确认:标题即被删任务名(用户要知道删的是哪个),文案含该任务已记录的分钟数(时间账保留为未绑定) */
 @Composable
 internal fun TaskDeleteDialog(prompt: TaskDeletePrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.task_delete_title)) },
+        title = { Text(prompt.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         text = { Text(stringResource(R.string.task_delete_confirm, prompt.minutes)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {

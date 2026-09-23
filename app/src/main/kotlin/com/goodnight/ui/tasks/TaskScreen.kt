@@ -29,6 +29,15 @@ import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
 
 /**
+ * 两段列表共处同一个 LazyColumn 的 key 空间:同一 id 勾选完成时,「进行中」与「已完成」是两条
+ * 独立 Room 流,两帧之间同一个 id 可能同时在两条流里 —— 不带段前缀就会撞 key,
+ * Compose 直接抛 `Key "..." was already used` 硬崩。段前缀从构造上保证 key 全局唯一。
+ */
+internal fun activeRowKey(id: Long): String = "a$id"
+
+internal fun doneRowKey(id: Long): String = "d$id"
+
+/**
  * v2.1 Task 6 任务页:进行中(长按拖动排序)+ 已完成(按完成时间倒序,不参与拖动)。
  * 行内勾选完成/取消完成,点卡片改名,垃圾桶删除(确认文案含已记录分钟数)。
  * 视觉沿用既有页面:Scaffold + TopAppBar + 卡片列表(见 ProfilesScreen)。
@@ -67,7 +76,7 @@ fun TaskScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(TaskRowSpacing),
         ) {
             item { SectionLabel(stringResource(R.string.tasks_active)) }
-            itemsIndexed(active, key = { _, t -> t.id }) { index, task ->
+            itemsIndexed(active, key = { _, t -> activeRowKey(t.id) }) { index, task ->
                 ActiveTaskRow(
                     task = task,
                     index = index,
@@ -81,7 +90,7 @@ fun TaskScreen(onBack: () -> Unit) {
             if (active.isEmpty()) item { EmptyHint(stringResource(R.string.tasks_empty_active)) }
 
             item { SectionLabel(stringResource(R.string.tasks_done)) }
-            items(done, key = { it.id }) { task ->
+            items(done, key = { doneRowKey(it.id) }) { task ->
                 DoneTaskRow(
                     task = task,
                     onToggle = { vm.onToggleDone(task.id) },

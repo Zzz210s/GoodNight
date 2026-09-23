@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
@@ -24,20 +24,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.goodnight.R
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
-import kotlin.math.roundToInt
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/** 卡片固定行高 + 列表间距:拖动落点按下标步进换算(不依赖运行期测量) */
+/**
+ * 卡片行高**下限** + 列表间距。行高按内容自适应([Modifier.heightIn]):大字号/字体缩放或
+ * 已完成行两行内容不再被 Card 裁掉;拖动落点则按行实测高度换算,与真实行高保持一致。
+ */
 internal val TaskRowHeight = 64.dp
 internal val TaskRowSpacing = 12.dp
 private val HHmm = DateTimeFormatter.ofPattern("MM-dd HH:mm")
@@ -75,7 +79,11 @@ internal fun ActiveTaskRow(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val stepPx = with(LocalDensity.current) { (TaskRowHeight + TaskRowSpacing).toPx() }
+    val density = LocalDensity.current
+    val spacingPx = with(density) { TaskRowSpacing.toPx() }
+    val fallbackStepPx = with(density) { (TaskRowHeight + TaskRowSpacing).toPx() }
+    // 实测行高(首帧前为 0,退化到基准值);步进 = 本行高度 + 间距,行高变高时落点不漂移
+    var rowHeightPx by remember(task.id) { mutableFloatStateOf(0f) }
     var dragY by remember(task.id) { mutableFloatStateOf(0f) }
     val dragging = dragY != 0f
     Card(
@@ -83,7 +91,8 @@ internal fun ActiveTaskRow(
         border = if (dragging) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier
             .fillMaxWidth()
-            .height(TaskRowHeight)
+            .heightIn(min = TaskRowHeight)
+            .onSizeChanged { rowHeightPx = it.height.toFloat() }
             .graphicsLayer {
                 translationY = dragY
                 if (dragging) {
@@ -95,9 +104,12 @@ internal fun ActiveTaskRow(
                 detectDragGesturesAfterLongPress(
                     onDrag = { change, delta -> change.consume(); dragY += delta.y },
                     onDragEnd = {
-                        val steps = (dragY / stepPx).roundToInt()
+                        // 实时读实测行高后的步进:pointerInput 的 lambda 不随重测重启,靠闭包快照会一直
+                        // 用首帧的基准步进(行高自适应就白改了)。dragTargetIndex 已夹取落点。
+                        val step = dragStepPx(rowHeightPx, spacingPx, fallbackStepPx)
+                        val target = dragTargetIndex(index, count, dragY, step)
                         dragY = 0f
-                        if (steps != 0) onMove(index, (index + steps).coerceIn(0, count - 1))
+                        if (target != index) onMove(index, target)
                     },
                     onDragCancel = { dragY = 0f },
                 )
@@ -110,7 +122,7 @@ internal fun ActiveTaskRow(
 /** 已完成任务行:不参与拖动,勾选取消完成回到进行中;标题加删除线以示归档 */
 @Composable
 internal fun DoneTaskRow(task: TaskEntity, onToggle: () -> Unit, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth().height(TaskRowHeight)) {
+    Card(Modifier.fillMaxWidth().heightIn(min = TaskRowHeight)) {
         Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = true, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f)) {
@@ -119,6 +131,8 @@ internal fun DoneTaskRow(task: TaskEntity, onToggle: () -> Unit, onDelete: () ->
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textDecoration = TextDecoration.LineThrough,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 task.doneAt?.let {
                     val stamp = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(HHmm)
@@ -126,6 +140,8 @@ internal fun DoneTaskRow(task: TaskEntity, onToggle: () -> Unit, onDelete: () ->
                         stringResource(R.string.task_done_at, stamp),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -140,7 +156,7 @@ internal fun DoneTaskRow(task: TaskEntity, onToggle: () -> Unit, onDelete: () ->
     }
 }
 
-/** 行内容:拖动把手(视觉提示)+ 勾选 + 标题 + 删除 */
+/** 行内容:拖动把手(视觉提示)+ 勾选 + 标题 + 删除。标题单行省略:100 字标题也不再折行裁字 */
 @Composable
 private fun TaskRowBody(title: String, checked: Boolean, onToggle: () -> Unit, onDelete: () -> Unit) {
     Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -151,7 +167,13 @@ private fun TaskRowBody(title: String, checked: Boolean, onToggle: () -> Unit, o
         )
         Spacer(Modifier.width(8.dp))
         Checkbox(checked = checked, onCheckedChange = { onToggle() })
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         IconButton(onClick = onDelete) {
             PathIcon(
                 IconPaths.TRASH, size = 20.dp,
