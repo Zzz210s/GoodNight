@@ -15,7 +15,9 @@ import com.goodnight.timer.RuntimeSnapshot
  * [com.goodnight.data.DailyTotalRepository.recordWorkSessionSplit]):
  * 1. 只算 WORK 段,且当前绑定就是 [taskId];休息段/未绑定/别的任务都是 0(休息不落时间账);
  * 2. 归属:本段窗口按任务切点切分,子窗口归属取「起点之前或等于起点的最后一个切点」的新任务
- *    (切点编码见 [RuntimeSnapshot.taskCuts]);无切点时整段归属当前绑定 ——
+ *    (切点编码见 [RuntimeSnapshot.taskCuts]);窗口之前没有任何切点时(含段首窗口)取**最早切点的
+ *    fromTaskId**,即段首任务,与结算的 headTaskId 同口径 —— 段内切走未切回时它不等于当前绑定;
+ *    无切点时整段归属当前绑定 ——
  *    即首次绑定作用于整段的「案 B」语义,与 [com.goodnight.timer.isHeadTaskBinding] 一致;
  * 3. 暂停:**严格超过** [MERGE_GAP_MS] 的暂停不计工作 —— 入库层用 `>= 3 分钟` 切段后,
  *    [com.goodnight.data.mergeSessions] 又把间隔 `<= 3 分钟` 的相邻段并回,净效果正是
@@ -23,7 +25,8 @@ import com.goodnight.timer.RuntimeSnapshot
  * 4. 进行中的暂停:工作只算到暂停起点 [RuntimeSnapshot.pauseStartWall]。
  *
  * 未做(与落段规则一致的近似):合并后不足 [com.goodnight.data.MIN_SPAN_MS] 的极短子段不剔除 ——
- * 差异 < 1 分钟,四舍五入到整分后与落段口径无可见差别。
+ * 被 [com.goodnight.data.mergeSessions] 整段丢弃的子段最长可达 MIN_SPAN_MS(3 分钟),
+ * 即每个被丢子段最多差近 3 分钟,段数多时误差会叠加。
  */
 internal fun inFlightMillisFor(s: RuntimeSnapshot, taskId: Long, nowWall: Long): Long {
     if (s.phase != Phase.WORK || s.taskId != taskId) return 0L
@@ -37,10 +40,12 @@ internal fun inFlightMillisFor(s: RuntimeSnapshot, taskId: Long, nowWall: Long):
     // 进行中的暂停也并入(与 resume 时并入 pauseGaps 的口径一致);严格超过阈值的暂停才不计工作
     val pauses = (s.pauseWindows() + listOfNotNull(s.pauseStartWall?.let { longArrayOf(it, nowWall) }))
         .filter { it[1] - it[0] > MERGE_GAP_MS }
+    // 窗口之前无切点时的归属:无切点整段归当前绑定,有切点则归段首任务(最早切点的 fromTaskId)
+    val headTaskId = if (cuts.isEmpty()) s.taskId else cuts.minByOrNull { it.first }?.second
 
     var total = 0L
     bounds.zipWithNext().forEach { (a, b) ->
-        val owner = cuts.lastOrNull { it.first <= a }?.third ?: s.taskId
+        val owner = cuts.lastOrNull { it.first <= a }?.third ?: headTaskId
         if (owner == taskId) total += (b - a - pausedWithin(a, b, pauses)).coerceAtLeast(0L)
     }
     return total

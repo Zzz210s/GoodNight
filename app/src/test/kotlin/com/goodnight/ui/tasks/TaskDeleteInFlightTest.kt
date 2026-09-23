@@ -101,6 +101,28 @@ class TaskDeleteInFlightTest {
         assertEquals(40L, v.deletePrompt.value!!.minutes) // 20 + 20,不含 B 的 20 分钟
     }
 
+    /**
+     * 段内切走**不切回**:删除当前绑定任务时,段首窗口归段首任务(最早切点的 fromTaskId),
+     * 不能按当前绑定把它算给新任务 —— 否则弹窗分钟数虚高(切得越多差越多)。
+     */
+    @Test fun deletePromptExcludesHeadWindowAfterSwitchingAway() = runTest {
+        val v = vm()
+        v.onCreate("写周报"); v.onCreate("其它"); pump()
+        val head = idOf("写周报")
+        val bound = idOf("其它")
+        val now = g.time.now()
+        // 本段 60 分钟:段首起 40 分钟归 A(切走后未切回),之后 20 分钟归 B,当前绑定 B
+        g.engine.restore(
+            snap(taskId = bound).copy(
+                sessionStartWall = now - 60 * 60_000L,
+                taskCuts = "${now - 20 * 60_000L},$head,$bound",
+            ),
+        )
+        assertNear(20 * 60_000L, v.inFlightMillis(bound))
+        v.onDeleteRequest(bound); pump()
+        assertEquals(20L, v.deletePrompt.value!!.minutes) // 只含切点之后那段
+    }
+
     @Test fun inFlightStopsAtPauseAndSkipsLongPauseWindows() = runTest {
         val v = vm()
         v.onCreate("写周报"); pump()
