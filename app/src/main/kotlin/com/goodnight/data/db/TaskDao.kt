@@ -46,6 +46,17 @@ interface TaskDao {
     suspend fun clearTaskRefs(taskId: Long)
 
     /**
+     * v2.1 Task 9:导入事务末尾归一化悬挂引用 —— 段引用的任务不在库中时置为未绑定。
+     * task id 是"每库自增 + 备份跨设备携带"的命名空间,留着悬挂 id 会在之后导入另一台设备的
+     * 备份(同 id 是另一个任务)时被静默重绑,故导入后必须回到"库里不存在悬挂 taskId"的不变量。
+     */
+    @Query(
+        "UPDATE focus_session SET taskId = NULL WHERE taskId IS NOT NULL " +
+            "AND taskId NOT IN (SELECT id FROM task)"
+    )
+    suspend fun clearDanglingTaskRefs()
+
+    /**
      * v2.1 Task 5:按 id 取标题(通知标题拼接用)。不过滤 done —— 段可能绑定一个后来
      * 被标记完成的任务,通知仍要显示它的名字。未知 id 返回 null。
      */

@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  * v2.1 Task 9:备份 v2(顶层 `tasks` + `focusSessions[].taskId`)与 v1 兼容导入。
  *
  * 覆盖:v1 账目逐值等价且任务表为空、v2 往返含任务字段与每段绑定、备份里引用的任务已不存在
- * 时仍可导入(段与账目保留)、更高版本安全拒绝(不写库)。
+ * 时仍可导入(段与账目保留,悬挂引用归一为未绑定)、更高版本安全拒绝(不写库)。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = android.app.Application::class) // 绕过 GoodNightApp 真实装配,保持测试封闭
@@ -67,6 +67,7 @@ class DataTransferV2Test {
 
         val ss = db.focusSessionDao().getAll()
         assertEquals(listOf(1L, 2L), ss.map { it.id })
+        assertEquals(listOf(1L, 2L), ss.map { it.profileId })
         assertEquals(listOf(100L, 300L), ss.map { it.startAt })
         assertEquals(listOf(200L, 400L), ss.map { it.endAt })
         assertTrue(ss.all { it.taskId == null })
@@ -121,7 +122,11 @@ class DataTransferV2Test {
         assertEquals("番茄", dst.profileDao().getAll().single().name)
     }
 
-    /** 备份里的段引用了 tasks 中不存在的任务(任务已删的旧备份):不报错,段与账目保留 */
+    /**
+     * 备份里的段引用了 tasks 中不存在的任务(任务已删的旧备份 / 来自另一台设备):不报错,
+     * 段与账目保留,但悬挂的 taskId 在导入事务末尾归一为 null —— 否则它会在之后导入
+     * 另一台设备的备份(同 id 是另一个任务)时被静默重绑,历史归属被改写且无提示。
+     */
     @Test fun importV2BackupWithDeletedTaskRefStillWorks() = runTest {
         val db = open("orphan")
         val counts = DataTransfer.importJson(db, ORPHAN_JSON)
@@ -131,7 +136,7 @@ class DataTransferV2Test {
         val s = db.focusSessionDao().getAll().single()
         assertEquals(100L, s.startAt)
         assertEquals(200L, s.endAt)
-        assertEquals(99L, s.taskId)
+        assertNull(s.taskId)
     }
 
     /** 合并而非整库替换:外来任务按 id 入库,库内未涉及的任务保留 */

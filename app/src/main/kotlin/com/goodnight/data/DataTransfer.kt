@@ -17,6 +17,11 @@ import org.json.JSONObject
  * `focusSessions[].taskId`。导入 v1 时任务表为空、全部段为未绑定,账目与旧版逐值等价。
  * 版本高于 [FORMAT_VERSION] 一律拒绝(抛 IllegalArgumentException):未来格式可能有本版读不懂的
  * 字段,按老规则合并会静默丢数据,宁可让调用方提示"备份文件无效"。
+ *
+ * **导入后不变量**:事务末尾归一化悬挂引用 —— 段引用的 `taskId` 在任务表里不存在时置为 NULL。
+ * task id 是"每库自增 + 备份跨设备携带"的命名空间,悬挂 id 会在之后导入另一台设备的备份
+ * (同 id 是另一个任务)时被静默重绑,历史段归属被改写且无提示;写库时就清掉可保持
+ * "库里不存在悬挂 taskId"(与 [com.goodnight.data.db.TaskDao.clearTaskRefs] 同口径)。
  */
 object DataTransfer {
     const val FORMAT_VERSION = 2
@@ -77,7 +82,11 @@ object DataTransfer {
         return root.toString(2)
     }
 
-    /** 导入 JSON 并 upsert 合并;返回 (配置数, 日累计数, 段数, 任务数)。解析失败/版本过新抛 IllegalArgumentException */
+    /**
+     * 导入 JSON 并 upsert 合并;返回 (配置数, 日累计数, 段数, 任务数)。
+     * JSON 结构/类型不合法抛 [org.json.JSONException],版本高于本版抛 IllegalArgumentException
+     * (调用方 [com.goodnight.ui.settings.SettingsViewModel.restoreFrom] 用 runCatching 兜住)。
+     */
     suspend fun importJson(db: GoodNightDatabase, json: String): ImportCounts {
         val root = JSONObject(json)
         // 缺 version 的按 v1 处理(历史文件均带 version,这里只对"读不懂的更新格式"拒绝)
@@ -127,12 +136,14 @@ object DataTransfer {
         val taskRows = ArrayList<TaskEntity>(tasks.length())
         for (i in 0 until tasks.length()) {
             val o = tasks.getJSONObject(i)
+            val done = o.optInt("done", 0) != 0
             taskRows.add(TaskEntity(
                 id = o.optLong("id", 0),
                 title = o.getString("title"),
-                done = o.optInt("done", 0) != 0,
+                done = done,
                 createdAt = o.optLong("createdAt", 0),
-                doneAt = if (o.isNull("doneAt")) null else o.optLong("doneAt"),
+                // 实体约束 done/doneAt 成对:未完成一律 null(外部工具写布尔 "done": true 会被 optInt 读成 0)
+                doneAt = if (!done || o.isNull("doneAt")) null else o.optLong("doneAt"),
                 sortOrder = o.optLong("sortOrder", 0),
             ))
         }
@@ -143,6 +154,8 @@ object DataTransfer {
             db.profileDao().upsertAll(profileRows)
             db.dailyTotalDao().upsertAll(totalRows)
             db.focusSessionDao().insertAllIgnore(sessionRows)
+            // 末尾归一化:备份引用的任务不在库中(或本段与任务都来自不同设备)时置为未绑定
+            db.taskDao().clearDanglingTaskRefs()
         }
         return ImportCounts(profiles.length(), totals.length(), sessions.length(), tasks.length())
     }
