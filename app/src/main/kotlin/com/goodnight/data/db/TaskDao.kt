@@ -2,6 +2,7 @@ package com.goodnight.data.db
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -29,6 +30,9 @@ interface TaskDao {
     fun observeDone(): Flow<List<TaskEntity>>
 
     @Insert suspend fun insert(t: TaskEntity): Long
+
+    /** v2.1 Task 9:备份导入按主键合并(同 id 覆盖);库内未涉及的任务不动 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(rows: List<TaskEntity>)
 
     @Query("UPDATE task SET title = :title WHERE id = :id") suspend fun rename(id: Long, title: String)
 

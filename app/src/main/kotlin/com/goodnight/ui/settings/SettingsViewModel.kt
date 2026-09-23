@@ -136,7 +136,7 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
 
     /**
      * 手动恢复:自 SAF 文档 Uri 读 JSON 并合并入库。
-     * @return 写入的日累计行数;读/解析失败返回 null(由 UI 提示)
+     * @return 写入的行数合计(配置/日累计/段/任务,v2.1 Task 9 起含任务);读/解析失败返回 null(由 UI 提示)
      */
     suspend fun restoreFrom(uri: android.net.Uri): Int? = runCatching {
         val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -144,10 +144,10 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
                 it.readBytes().toString(Charsets.UTF_8)
             } ?: ""
         }
-        val n = com.goodnight.data.DataTransfer.importJson(graph.db, text).dailyTotals
+        val counts = com.goodnight.data.DataTransfer.importJson(graph.db, text)
         // v1.10.8:导入后按"段落派生"重算全部合计,保证与每日详情时间段之和一致
         graph.totalsRepo.recomputeAllDays()
-        n
+        counts.total
     }.getOrNull()
 
     fun refreshExactAlarm(context: Context) {

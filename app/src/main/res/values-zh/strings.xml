@@ -125,7 +125,7 @@
     <string name="backup_done">已备份</string>
     <string name="backup_failed">备份失败:目录不可写或授权已失效</string>
     <string name="backup_pick_dir">请选择备份目录</string>
-    <string name="data_imported">已从备份恢复 %1$d 条</string>
+    <string name="data_imported">已从备份恢复 %1$d 条记录</string>
     <string name="data_import_failed">备份文件无效或损坏</string>
     <string name="report_pick_period">选择周期</string>
     <string name="report_search_hint">yyyy-MM-dd / yyyy-MM</string>
