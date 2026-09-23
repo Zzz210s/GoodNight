@@ -7,6 +7,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [2.1.0] - 2026-09-24
+### Added
+- **Tasks, and a focus run can be bound to one**: a task page (create, rename, complete, long-press drag to
+  reorder, delete), a task chip on the timer card with a picker (including "no task"), the task name shown for
+  every segment in the daily detail, and a "by task" breakdown in the report.
+- **The binding survives a process death**: the bound task and the in-run switches are persisted with the run
+  state, so after a kill/restart the timer resumes on the same task (the chip shows it again).
+- **Switching the task mid-run splits the time**: each switch is a boundary, so the report lists one row per
+  task and the day's total stays exactly the sum of the segments.
+- **Deleting a task keeps its recorded time**: the segments are kept and fall back to "unbound" (the
+  confirmation says how many minutes are kept), and the daily/period totals are unchanged.
+- **Backup format v2** (v1 files still import): the file gains a `tasks` list and every session carries a
+  `taskId` (`null` = unbound). Importing a v1 file leaves all segments unbound with unchanged numbers.
+
+### Notes
+- **Do not merge backups from two devices**: task ids are per-database auto-increment values, so a merged file
+  can attach already recorded segments to a different task that happens to share the same id.
+- **2.0.0 and older cannot read the task fields of a 2.1 backup**: restoring a 2.1 file with an older version
+  drops the tasks and the bindings (the time accounts themselves are unaffected).
+
 ## [2.0.0] - 2026-09-20
 ### Breaking
 - **Package name changed to `com.goodnight`** (was `com.embertimer`): this is a new app identity, so it cannot
