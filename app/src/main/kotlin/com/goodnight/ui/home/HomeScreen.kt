@@ -61,7 +61,7 @@ fun HomeScreen(
     val dayDetail by vm.dayDetail.collectAsStateWithLifecycle()
     // v2.1 Task 7:当前任务 chip 的文案与选择器
     val currentTask by vm.currentTask.collectAsStateWithLifecycle()
-    val activeTasks by vm.activeTasks.collectAsStateWithLifecycle()
+    val pickerTasks by vm.pickerTasks.collectAsStateWithLifecycle()
     val taskPickerOpen by vm.taskPickerOpen.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -159,11 +159,13 @@ fun HomeScreen(
             }
 
     }
-        // v2.1 Task 7:任务选择器(进行中任务 + 「不绑定」);选中即发 SET_TASK 命令
+        // v2.1 Task 7:任务选择器(任务列表 + 「不绑定」);选中即发 SET_TASK 命令
         if (taskPickerOpen) {
+            // 列表与打勾口径见 [HomeViewModel.pickerTasks]:绑定任务已归档时也列出来并打勾;
+            // 已删任务解析不到实体(currentTask == null)→ selectedId 传 null,「不绑定」打勾
             TaskPicker(
-                tasks = activeTasks,
-                selectedId = ui.snap?.taskId,
+                tasks = pickerTasks,
+                selectedId = currentTask?.id,
                 onPick = vm::onPickTask,
                 onDismiss = vm::onDismissTaskPicker,
             )

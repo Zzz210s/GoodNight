@@ -54,7 +54,10 @@ fun taskSpansOf(sessions: List<FocusSessionEntity>, titles: Map<Long, String>): 
             continue
         }
         block.forEachIndexed { k, r ->
-            val spanEnd = block.getOrNull(k + 1)?.startAt ?: end
+            // 下一行起点可能 <= 本行起点(同一配置当日出现重叠/重复 startAt 行):
+            // maxOf 兜底,0 长 span 直接跳过 —— 否则会产出空段、或把后一行的时长挂到本行名下
+            val spanEnd = maxOf(block.getOrNull(k + 1)?.startAt ?: end, r.startAt)
+            if (spanEnd <= r.startAt) return@forEachIndexed
             val last = out.lastOrNull()
             if (last != null && last.taskId == r.taskId && last.end == r.startAt) {
                 out[out.lastIndex] = last.copy(end = spanEnd) // 同一任务且首尾相接:并回一条

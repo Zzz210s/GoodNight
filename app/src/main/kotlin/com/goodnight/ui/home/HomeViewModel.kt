@@ -78,6 +78,15 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
     val activeTasks: StateFlow<List<TaskEntity>> = graph.taskRepo.observeActive()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * 选择器实际展示的列表 = 进行中任务 + 当前绑定任务(若它已不在进行中列表里,如刚被归档)。
+     * 否则会出现"chip 显示某任务、列表里哪一项都不打勾"的误导。
+     * 任务已被删时 [currentTask] 为 null(查不到实体),此处不补行 —— 与 chip 的「未绑定」文案同口径。
+     */
+    val pickerTasks: StateFlow<List<TaskEntity>> = combine(activeTasks, currentTask) { active, bound ->
+        if (bound != null && active.none { it.id == bound.id }) active + bound else active
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _taskPickerOpen = MutableStateFlow(false)
     val taskPickerOpen: StateFlow<Boolean> = _taskPickerOpen.asStateFlow()
     fun onOpenTaskPicker() { _taskPickerOpen.value = true }

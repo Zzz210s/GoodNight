@@ -83,7 +83,7 @@ class HomeTaskChipTest {
         assertEquals("「不绑定」用哨兵值表达 null", NO_TASK_ID, shadowOf(app).nextStartedService.getLongExtra(EXTRA_TASK_ID, NO_TASK_ID))
     }
 
-    /** 未绑定段:详情行不带任务名(UI 据此不渲染分隔符与名字) */
+    /** 未绑定段:详情行不带任务名(UI 据此不渲染名字行) */
     @Test fun unboundSpanHasNoTaskName() = runTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "htc_detail_unbound")
         g.bootstrap()
@@ -143,6 +143,25 @@ class HomeTaskChipTest {
         assertEquals("写周报", row.taskSpans[0].taskName)
         assertEquals(t0, row.taskSpans[0].start)
         assertEquals(t0 + 30 * 60_000L, row.taskSpans[0].end)
+    }
+
+    /**
+     * 绑定任务已归档(不在进行中列表)时,选择器列表里仍要出现它 —— 否则 chip 显示某任务、
+     * 列表里却哪一项都不打勾(「不绑定」也不打勾,因为绑定 id 非 null)。
+     */
+    @Test fun pickerListsBoundTaskAfterItIsArchived() = runTest {
+        val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "htc_picker_done")
+        g.bootstrap()
+        val a = g.taskRepo.create("写周报", g.time.now())!!
+        val b = g.taskRepo.create("读论文", g.time.now())!!
+        val vm = HomeViewModel(g)
+        g.engine.restore(snap(EngineStatus.RUNNING, taskId = b))
+        g.taskRepo.setDone(b, true, g.time.now())
+        assertEquals("归档后不在进行中列表", listOf(a), vm.activeTasks.first { it.isNotEmpty() }.map { it.id })
+        // 先等 chip 的绑定解析出来(与 chipFollowsEngineBinding 同款等待),再读选择器列表:
+        // 此时 combine 的首次发射就已含绑定任务,不必再等派生流(避免 Robolectric 主 looper 泵不到)
+        assertEquals("打勾 id 取可解析的绑定任务", b, vm.currentTask.first { it != null }!!.id)
+        assertEquals("但选择器仍列出它(且是打勾项)", listOf(a, b), vm.pickerTasks.first { it.size == 2 }.map { it.id })
     }
 
     private fun dayStart(day: LocalDate): Long =

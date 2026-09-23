@@ -86,8 +86,9 @@ private fun ProfileSection(row: DayDetailRow) {
         }
         // v1.10:各段 开始~结束(时:分)。左侧固定单列大时段标识(纯文字,无色块);
         // 标识右侧为双列时间段,单行不换行。
-        // v2.1 Task 7:显示走 [DayDetailRow.taskSpans](按任务切点切开),每段时段后追加任务名;
-        // 未绑定段不显示任务名。区间集合与行合计仍由 [DayDetailRow.sessions] 决定。
+        // v2.1 Task 7:显示走 [DayDetailRow.taskSpans](按任务切点切开),时段一行、任务名另起一行
+        // (名字与时间同行时可用宽度只剩 ≈5 个汉字);未绑定段不显示名字、仍只占一行。
+        // 区间集合与行合计仍由 [DayDetailRow.sessions] 决定。
         if (row.sessions.isNotEmpty()) {
             val zone = ZoneId.systemDefault()
             // v1.10.10:列宽按**当前字体大小实测**得出(而不是写死 dp)——大字号/系统字体放大时
@@ -112,10 +113,10 @@ private fun ProfileSection(row: DayDetailRow) {
                             Spacer(Modifier.width(PERIOD_GAP_W))
                             // fill=false + weight:短文本维持既有自然宽(与旧排版一致),
                             // 追加任务名变长时最多占半行,超出由省略号截断而不撑破行宽
-                            SpanText(pair[0], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
+                            SpanCell(pair[0], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
                             if (pair.size > 1) {
                                 Spacer(Modifier.width(SPAN_GAP_W))
-                                SpanText(pair[1], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
+                                SpanCell(pair[1], zone, Modifier.weight(1f, fill = false).widthIn(min = spanColW))
                             }
                         }
                     }
@@ -125,20 +126,36 @@ private fun ProfileSection(row: DayDetailRow) {
     }
 }
 
-/** 单条时间段文本:HH:mm ~ HH:mm(绑定了任务时追加「· 任务名」);单行不换行,超宽省略号 */
+/**
+ * 单个时间段单元格:第一行 HH:mm ~ HH:mm;绑定了任务时名字**另起一行**。
+ * 名字与时间同行时可用宽度只剩 `整格 - 时间文本`(Pixel_8 实测 ≈133px,约 4 个汉字),
+ * 常见的 "WriteReport" 类名字会被截掉一半;独立一行后用满整格宽(≈375px)。
+ * 名字不存在(未绑定)时只有一行,单元格高度不增加。单行 + 省略号。
+ */
 @Composable
-private fun SpanText(span: DaySpan, zone: ZoneId, modifier: Modifier = Modifier) {
+private fun SpanCell(span: DaySpan, zone: ZoneId, modifier: Modifier = Modifier) {
     val time = HHmm.format(Instant.ofEpochMilli(span.start).atZone(zone)) + " ~ " +
         HHmm.format(Instant.ofEpochMilli(span.end).atZone(zone))
-    Text(
-        if (span.taskName == null) time else "$time · ${span.taskName}",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        softWrap = false,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier,
-    )
+    Column(modifier) {
+        Text(
+            time,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+        span.taskName?.let { name ->
+            Text(
+                name,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 /** 大时段标识与时间段之间的间距(比两列时间段之间大,层次更清楚) */

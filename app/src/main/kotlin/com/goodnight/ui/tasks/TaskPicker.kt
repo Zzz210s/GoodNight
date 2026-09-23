@@ -45,19 +45,30 @@ internal fun TaskChip(
         label = {
             Text(
                 taskTitle ?: stringResource(R.string.task_unbound),
-                style = MaterialTheme.typography.labelLarge,
+                // labelLarge(14sp)下「未绑定任务」本身就占 101.7dp,会被 96dp 限宽截断,
+                // 故降一档到 labelMedium(12sp,与每日详情时段文本同档)
+                style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        // 标题可能很长:限宽后由 label 省略号截断,不挤占卡片右上的相位/循环徽标
-        modifier = modifier.widthIn(max = 150.dp),
+        // 标题可能很长:限宽后由 label 省略号截断。上限必须小于「chip 左沿 -> 大数字左沿」的空隙,
+        // 否则长名字会盖住居中的倒计时首位数字。Pixel_8(density 2.625)实测:chip 左沿 74px,
+        // 大数字(六字符,如 148:41)左沿 361px -> 可用 ≈109dp;取 96dp 留 ~13dp 余量。
+        modifier = modifier.widthIn(max = CHIP_MAX_W),
     )
 }
 
+/** chip 最大宽度:见 [TaskChip] 的几何说明(≤ 大数字左沿 - chip 左沿 - 余量) */
+private val CHIP_MAX_W = 96.dp
+
 /**
- * v2.1 Task 7:任务选择器 —— 进行中任务列表 + 「不绑定」一项(当前绑定打勾)。
+ * v2.1 Task 7:任务选择器 —— 任务列表 + 「不绑定」一项(当前绑定打勾)。
  * 选中即回调(调用方发 SET_TASK 命令);选择器开关由调用方按 VM 状态挂载。
+ *
+ * [tasks] 应含当前绑定任务(即便它已不在进行中列表里,如已完成任务),否则会出现
+ * "chip 显示某任务、列表里却哪一项都不打勾"的误导;[selectedId] 应传**能解析到实体**的
+ * 绑定 id(任务已被删时为 null)—— 与 chip 的文案口径一致,此时「不绑定」打勾。
  */
 @Composable
 internal fun TaskPicker(
@@ -83,7 +94,10 @@ internal fun TaskPicker(
                 PickerRow(stringResource(R.string.task_picker_unbind), selectedId == null) { onPick(null) }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        // Material 约定:取消/关闭这类非主操作放 dismissButton;M3 的 AlertDialog 签名要求
+        // confirmButton 非空,本弹窗没有主操作故留空槽(不渲染任何按钮)
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
