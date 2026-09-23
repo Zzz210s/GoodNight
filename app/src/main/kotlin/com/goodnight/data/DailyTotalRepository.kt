@@ -64,6 +64,17 @@ class DailyTotalRepository(
         sessionDao.betweenMs(startMs, endMs)
 
     /**
+     * v2.1 Task 8:窗口内按任务分解(段起点归属,与 [sessionsBetweenMs] 同口径)。
+     * 标题在仓库层用 task 表补齐;窗口内无段 → 空列表(界面不渲染该区块),
+     * 有段时「未绑定」恒在末位(即使 0)。排序/占比口径见 [taskSlices]/[taskPercents]。
+     */
+    suspend fun taskBreakdown(fromMs: Long, toMs: Long): List<TaskSlice> {
+        val rows = sessionDao.taskTotalsBetween(fromMs, toMs)
+        if (rows.isEmpty()) return emptyList()
+        return taskSlices(rows, db.taskDao().allNow().associate { it.id to it.title })
+    }
+
+    /**
      * v1.8.3:按暂停窗口分段落库——>=[minMs] 的暂停把整段切分为多段(每段不含长暂停间隙)。
      * 入库粒度只是"保留时间空档";**可见的分合由展示层决定**(v1.10:间隔 <= 3 分钟合并,
      * 见 [mergeSessions]),因此 [minMs] 只需 <= 展示阈值即可覆盖所有需要留痕的暂停。

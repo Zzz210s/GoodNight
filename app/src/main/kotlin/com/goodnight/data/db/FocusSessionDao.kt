@@ -45,4 +45,18 @@ interface FocusSessionDao {
     /** 墙钟窗口内全部段(起点升序);供报表时段分布 */
     @Query("SELECT * FROM focus_session WHERE startAt >= :startMs AND startAt < :endMs ORDER BY startAt")
     suspend fun betweenMs(startMs: Long, endMs: Long): List<FocusSessionEntity>
+
+    /**
+     * v2.1 Task 8:窗口内按任务分组取时长与段数。归属口径与 [betweenMs] 完全一致
+     * (段起点落在窗口内),因此跨午夜段按起点归日、次数 = 切段后的行数。
+     * 未绑定段的 taskId 为 NULL,单列一组;排序交给仓库层(未绑定必须固定末位)。
+     */
+    @Query(
+        "SELECT taskId, SUM(endAt - startAt) AS millis, COUNT(*) AS count FROM focus_session " +
+            "WHERE startAt >= :startMs AND startAt < :endMs GROUP BY taskId"
+    )
+    suspend fun taskTotalsBetween(startMs: Long, endMs: Long): List<TaskTotalRow>
 }
+
+/** v2.1 Task 8:按 taskId 分组的聚合行(`taskId` 为 null = 未绑定) */
+data class TaskTotalRow(val taskId: Long?, val millis: Long, val count: Int)

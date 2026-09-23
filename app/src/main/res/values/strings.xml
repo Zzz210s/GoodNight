@@ -103,6 +103,9 @@
     <string name="period_evening">Evening</string>
     <string name="ts_title">Time of day</string>
     <string name="metric_trend">Trend</string>
+    <!-- report by task (v2.1) -->
+    <string name="report_by_task">By task</string>
+    <string name="report_task_meta">%1$d sessions · %2$d%%</string>
     <string name="color_theme">Color theme</string>
     <string name="pack_ember">Ember</string>
     <string name="pack_green">Light green</string>

@@ -23,5 +23,8 @@ class EnResourcesTest {
         assertEquals("1h 30m", ctx.getString(R.string.duration_hm, 1, 30))
         // v2.1 Task 7:计时页任务 chip 的未绑定文案(zh 对照在 HomeTaskChipTest)
         assertEquals("No task", ctx.getString(R.string.task_unbound))
+        // v2.1 Task 8:报表「按任务」区块
+        assertEquals("By task", ctx.getString(R.string.report_by_task))
+        assertEquals("3 sessions · 45%", ctx.getString(R.string.report_task_meta, 3, 45))
     }
 }
