@@ -3,22 +3,16 @@ package com.goodnight.ui.settings
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.goodnight.data.ProfileRemoval
-import com.goodnight.data.db.FocusSessionEntity
-import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -29,8 +23,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * v2.2 Task 5:删除预告(归档 vs 真删)与三条前序指针 —— 归档不调清账路径、归档行不满足
- * 「至少保留 1 个」、归档时钟从活跃流消失。列表分段的用例见 ProfileManageTest。
+ * v2.2 Task 5:删除预告的**纯计算** —— 哪些归档(有历史,或正被引擎选中)、哪些真删、
+ * 「至少保留 1 个活跃时钟」扣下谁。写库的实际结局见 `ProfileDeleteApplyTest`(归档/真删)与
+ * `ProfileDeleteInUseTest`(正在使用 = 不停机 + 归档),列表分段见 `ProfileManageTest`。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "zh", application = Application::class)
@@ -50,21 +45,8 @@ class ProfileDeletePlanTest {
         runBlocking { g.appScope.coroutineContext.job.cancelAndJoin(); runCatching { g.db.close() } }
     }
 
-    private fun vm() = SettingsViewModel(g)
-
     private suspend fun clock(name: String, taskId: Long? = null) =
         g.profileRepo.byId(g.profileRepo.create(name, 25, 5, ProfileMode.COUNTDOWN, taskId)!!)!!
-
-    private suspend fun session(profileId: Long, millis: Long = 25 * 60_000L, taskId: Long? = null) =
-        g.db.focusSessionDao().insertAll(
-            listOf(FocusSessionEntity(profileId = profileId, startAt = 0, endAt = millis, taskId = taskId))
-        )
-
-    /** 归档:先造一段历史(有引用才归档),再走仓库的 removeOrArchive */
-    private suspend fun archive(clock: ProfileEntity) {
-        session(clock.id)
-        assertEquals(ProfileRemoval.Archived, g.profileRepo.removeOrArchive(clock.id))
-    }
 
     /** 删除预告:被会话段或每日合计引用的时钟 → 归档;两者都没有 → 真删(与原子删除同口径) */
     @Test fun deletePlanArchivesOnlyClocksWithHistory() = runTest {
@@ -80,6 +62,7 @@ class ProfileDeletePlanTest {
         assertEquals(2, plan.archiveCount)
         assertEquals("归档分钟 = 会话优先 + 每日合计", 115L, plan.archiveMinutes)
         assertTrue(plan.anyArchive)
+        assertFalse(plan.anyInUse)
 
         val plain = deletePlan(listOf(clean), emptyMap(), emptyMap())
         assertEquals(0, plain.archiveCount)
@@ -88,26 +71,25 @@ class ProfileDeletePlanTest {
     }
 
     /**
-     * 复审修复:归档同样受「至少保留 1 个**活跃**时钟」约束 —— 归档是列表隐藏,把唯一的活跃
-     * 时钟归档也会让活跃列表清零(首页开始键失效),所以计划为空、什么都不执行。
+     * 复审修复(计划侧):正被引擎选中的时钟在计划里也算归档(即使无历史)—— 确认框的归档计数与
+     * 「当前这段计时会继续」提示都靠它;实际写库同一判据(见 ProfileDeleteInUseTest)。
      */
-    @Test fun lastActiveClockIsNeitherArchivedNorDeleted() = runTest {
-        val only = clock("唯一")
-        session(only.id, millis = 25 * 60_000L)
+    @Test fun planArchivesInUseClockWithoutHistory() = runTest {
+        val inUse = clock("在用")
+        val clean = clock("无历史")
 
         val plan = planDeletion(
-            listOf(only),
-            activeCount = 1,
-            sessionMillis = mapOf(only.id to 25 * 60_000L),
-            dailyTotals = emptyMap(),
+            listOf(inUse, clean), activeCount = 3,
+            sessionMillis = emptyMap(), dailyTotals = emptyMap(),
+            engineProfileId = inUse.id,
         )
 
-        assertEquals("选中的就是最后一个活跃时钟:计划为空", 0, plan.count)
-        assertEquals(setOf(only.id), plan.keptIds)
-
-        assertFalse("唯一活跃时钟不归档", vm().deleteProfile(only))
-        assertFalse("行仍在且未归档", g.profileRepo.byId(only.id)!!.archived)
-        assertEquals("账一行不动", 1, g.db.focusSessionDao().getAll().size)
+        assertEquals(2, plan.count)
+        assertEquals("在用时钟进归档集合", setOf(inUse.id), plan.archivedIds)
+        assertEquals("归档包裹里没有分钟,归档分钟数为 0", 0L, plan.archiveMinutes)
+        assertEquals(setOf(inUse.id), plan.inUseIds)
+        assertTrue(plan.anyInUse)
+        assertEquals("另一个才是真删", listOf(clean.id), plan.removed.map { it.id })
     }
 
     /**
@@ -145,40 +127,5 @@ class ProfileDeletePlanTest {
         assertEquals(0, plan.archiveCount)
         assertFalse(plan.anyArchive)
         assertEquals(listOf(a.id), plan.clocks.map { it.id })
-    }
-
-    /** 指针 3:有历史的时钟删除走归档 —— 行保留、历史账一行不删、不再调清账路径 */
-    @Test fun deleteProfileArchivesHistoryAndKeepsRecords() = runTest {
-        val p = clock("有历史")
-        clock("另一个") // 活跃时钟 > 1,归档才被允许(复审修复:最后一个活跃时钟不归档)
-        session(p.id, millis = 30 * 60_000L)
-        g.totalsRepo.addWork("2026-09-24", p.id, 30 * 60_000L)
-
-        assertFalse("归档不需要发 stop", vm().deleteProfile(p))
-
-        assertTrue("行保留并标记归档", g.profileRepo.byId(p.id)!!.archived)
-        assertEquals("会话段一行不少", 1, g.db.focusSessionDao().getAll().size)
-        assertEquals(
-            "每日合计一行不少",
-            30 * 60_000L,
-            g.totalsRepo.profileTotals().first().first { it.profileId == p.id }.total,
-        )
-        assertTrue("归档后从管理页活跃流消失", g.profileRepo.observeAllActive().first().none { it.id == p.id })
-    }
-
-    /**
-     * 指针 1 + 复审修复:归档行不算「至少保留 1 个」—— 界面上看不见的行不能替活跃时钟挡删除。
-     * 活跃时钟有 2 个时,归档行既不占名额也不被这次删除影响。
-     */
-    @Test fun archivedClockDoesNotSatisfyKeepOneRule() = runTest {
-        val dead = clock("旧")
-        archive(dead)
-        val live = clock("在用")
-        val other = clock("另一个")
-
-        assertFalse("无历史 → 真删(归档行不参与「留一个」判定)", vm().deleteProfile(live))
-        assertNull("活跃时钟已删", g.profileRepo.byId(live.id))
-        assertNotNull("留下的活跃时钟还在", g.profileRepo.byId(other.id))
-        assertTrue("归档行未被动", g.profileRepo.byId(dead.id)!!.archived)
     }
 }

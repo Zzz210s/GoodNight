@@ -86,8 +86,8 @@ internal fun ProfileDialogHost(
             onDismiss = { state.closeEditing() },
             onConfirm = { name, w, r, mode ->
                 scope.launch {
-                    // 改归属 + 改名两步都要过「作用域内唯一」:失败已在 VM 内回滚(搬迁不残留),
-                    // 所以这里只负责提示 —— 不再出现「已换归属、名字未改」的半成品
+                    // 仓库层按**最终状态**一条带条件的 UPDATE 写入:目标作用域重名就整行不动,
+                    // 不会出现「已换归属、名字未改」的半成品 —— 这里只负责提示
                     if (!vm.commitScopeAndName(p, state.scope, name)) {
                         state.nameTaken = true
                         return@launch
@@ -126,28 +126,32 @@ internal fun ProfileDialogHost(
         )
     }
     state.deletePlan?.let { plan ->
-        // 确认框的计数按**真正会执行**的 [DeletePlan.count],而按钮写的是选中数:
-        // 计划里被「至少保留 1 个活跃时钟」扣掉的那条必须解释清楚,否则两个数字对不上像漏删
+        // 计数口径:按钮写**选中数**,归档分支首句也用选中数;正文里被门控扣下的那条、
+        // 以及正被引擎占用的那条用附注说清,否则两个数字对不上像漏删
         val body = when {
             // 计划为空 = 选中的就是最后一个活跃时钟(有历史也不归档:归档同样让它从列表消失)
             plan.count == 0 -> stringResource(R.string.delete_keep_one)
             plan.anyArchive -> stringResource(
                 R.string.delete_confirm_archive_body,
-                plan.count, plan.archiveCount, plan.archiveMinutes,
+                plan.selectedCount, plan.archiveCount, plan.archiveMinutes,
                 plan.count - plan.archiveCount,
             )
             else -> stringResource(R.string.delete_confirm_body, plan.count)
         }
-        // 被「至少保留 1 个活跃时钟」扣掉的那条:按钮写选中数、确认框首句也写选中数,差额用一句
-        // 「已选 N 个,其中 M 个会保留」解释清楚(计划为空时正文本身就是 delete_keep_one,不重复追加)
-        val note = plan.keptIds.size.takeIf { plan.count > 0 && it > 0 }
+        // 附注一:「已选 N 其中 M 会保留」解释按钮计数与执行数的差额
+        // 附注二:正被引擎使用的时钟归档后计时不停(只在真的正被使用时出现)
+        val notes = buildList {
+            if (plan.count > 0 && plan.keptIds.isNotEmpty()) {
+                add(stringResource(R.string.delete_keep_one_note, plan.selectedCount, plan.keptIds.size))
+            }
+            if (plan.anyInUse) add(stringResource(R.string.delete_confirm_in_use_note))
+        }
         AlertDialog(
             onDismissRequest = { state.deletePlan = null },
             title = { Text(stringResource(R.string.delete_confirm_title)) },
             text = {
                 Text(
-                    if (note == null) body
-                    else body + "\n" + stringResource(R.string.delete_keep_one_note, plan.selectedCount, note),
+                    if (notes.isEmpty()) body else (listOf(body) + notes).joinToString("\n"),
                 )
             },
             confirmButton = {
@@ -155,7 +159,7 @@ internal fun ProfileDialogHost(
                     val targets = plan.clocks
                     state.deletePlan = null
                     scope.launch {
-                        // 批量执行(含删除前的停机结算)在 VM 里;单个失败不阻断其余
+                        // 批量执行(判定 → 归档或真删)在 VM 里;单个失败不阻断其余
                         vm.deleteProfiles(targets)
                         onDeleteModeExit()
                     }

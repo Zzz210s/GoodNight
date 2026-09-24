@@ -120,6 +120,13 @@ class TimerService : Service() {
         }.onFailure { Log.w(TAG, "snapshot handler failed for $snap", it) }
     }
 
+    /**
+     * 空闲收尾:脱离前台 + 空闲通知 + stopSelf。
+     *
+     * 投递归属(复审修复):本函数只负责「计时 → 空闲」那一瞬間的 showIdle;管理页删/归档后
+     * 的补投归 `ui.settings.deleteProfiles`(那时服务已经拆走,没人会再投)。两侧用 serviceAttached
+     * 单侧仲裁,不再出现两次投递互相覆盖。
+     */
     private fun tearDownToIdle() {
         com.goodnight.diag.DiagLog.add("Svc", "空闲收尾：脱离前台 + 空闲通知 + stopSelf")
         stopForeground(STOP_FOREGROUND_DETACH)

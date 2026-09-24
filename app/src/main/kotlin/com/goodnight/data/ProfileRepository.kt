@@ -73,23 +73,23 @@ class ProfileRepository(
     }
 
     /**
-     * v2.2 Task 5(复审修复 W2):改归属 + 改名**一条 UPDATE 完成** —— 先按**最终状态**
-     * ([taskId], [name]) 预判目标作用域冲突,冲突则一行不动返回 false。
+     * v2.2 Task 5(复审修复 W2):改归属 + 改名**一条带条件的 UPDATE**
+     * ([ProfileDao.moveAndRenameIfFree]) —— 同一条语句里用 NOT EXISTS 判「目标作用域已有同名
+     * 活跃时钟」,不满足目标状态就一行不动。
      *
      * 不再走「先搬迁、改名失败再把归属搬回」:回滚本身也可能失败(原作用域这时已有同名活跃
-     * 时钟,例如历史数据里就有重名行),那会留下「已换归属、名字未改」的第三种状态,调用方
-     * 也拿不到可区分的失败。预判把这条路径整个消掉。
-     *
-     * 自身不参与冲突判定:搬迁时目标作用域里没有本行;不搬迁时早退(名字没变)。
-     * @return true = 已写入或本来就是这个状态;false = 目标作用域的最终名字已被占用
+     * 时钟,例如历史数据里就有重名行),那会留下「已换归属、名字未改」的第三种状态。
+     * 也不用「SELECT 预判 + UPDATE」两步:两步之间落下的新行会让预判作废(判完才写)。
+     * @return true = 已写入或本来就是这个状态;false = 目标作用域的最终名字已被占用(行不存在同样 false)
      */
-    suspend fun moveAndRename(id: Long, taskId: Long?, name: String): Boolean {
-        val row = dao.byId(id) ?: return false
-        if (row.taskId == taskId && row.name == name) return true
-        if (dao.byNameInScope(name, taskId) != null) return false
-        dao.update(row.copy(taskId = taskId, name = name))
-        return true
-    }
+    suspend fun moveAndRename(id: Long, taskId: Long?, name: String): Boolean =
+        dao.moveAndRenameIfFree(id, taskId, name) > 0
+
+    /**
+     * 无条件归档(行保留、列表隐藏)。调用方已判定该行**必须留下** —— 正被引擎选中(结算仍会
+     * 写到它身上)或已有历史;这里不再判引用:真删路径请走 [removeOrArchive]。
+     */
+    suspend fun archive(id: Long) = dao.archiveById(id)
 
     /**
      * v2.2:删时钟。有会话段或每日合计引用 → 归档(行保留,历史仍可解析其名);无引用 → 真删。

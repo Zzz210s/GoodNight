@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
  * 时钟管理:列表分「通用 / 任务专属(按任务分组)」两段(v2.2 Task 5);点卡片编辑(含改归属);
  * 垃圾桶进删除模式(勾选 + 底部删除选中);运行中时钟不可点。
  *
- * 删除按设计 §4 分两种结局:有历史 → 归档(行保留、列表隐藏、账不动),无历史 → 真删;
+ * 删除分两种结局:有历史**或正被引擎选中** → 归档(行保留、列表隐藏、账不动),无历史 → 真删;
  * 确认框先把「保留多少分钟」说清楚(见 [ProfileDialogHost])。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,21 +54,24 @@ fun ProfilesScreen(onBack: () -> Unit) {
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     /**
      * 列表门控 = **运行中**的时钟不可点(编辑/勾选都不行);暂停中仍可编辑(见 EnginePolicy)。
-     * 删除前的停机结算不在这里判 —— 那是 [SettingsViewModel.deleteProfiles] 的职责
-     * (暂停中若删的正是被引擎认着的那个,先停机结算再归档/删除,见 [needsSettleBeforeDelete])。
+     * 删除时「正被引擎选中」由 [SettingsViewModel.deleteProfile] 按最新快照重新判定:一律归档,
+     * 不停机(计时继续跑,行留在库里)。
      */
     val runningActiveId = if (ui.snap?.status == EngineStatus.RUNNING) ui.snap?.profileId else null
     BackHandler(enabled = deleteMode) { deleteMode = false; selectedIds = emptySet() }
 
     /**
      * 删除预告需要「已记录多少分钟」——会话段优先、缺段回落到每日合计(与 [planDeletion]
-     * 同一条口径),所以查库后才弹确认框。
+     * 同一条口径),所以查库后才弹确认框。引擎当前选中的时钟(快照非空 = 运行或暂停)也一并
+     * 传入:它一律归档,确认框据此补一句「当前这段计时会继续」。
      */
     fun requestDelete() {
         scope.launch {
             val sessions = app.graph.profileRepo.sessionMinutes()
             val targets = ui.profiles.filter { it.id in selectedIds }
-            state.deletePlan = planDeletion(targets, ui.profiles.size, sessions, ui.totals)
+            state.deletePlan = planDeletion(
+                targets, ui.profiles.size, sessions, ui.totals, engineProfileId = ui.snap?.profileId,
+            )
         }
     }
 

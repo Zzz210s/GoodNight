@@ -114,7 +114,8 @@ class TimerNotifIdleTest {
      *
      * showIdle 原先只在 MainActivity.onCreate / TimerService 收尾时调;管理页把选中时钟归档后
      * 没人重投,通知栏仍显示已下架时钟(连「启动」按钮一起,按下去就是 ACTION_START + 归档 id)。
-     * 现在删除/归档走 [SettingsViewModel.deleteProfiles],引擎空闲时它自己补一次 showIdle。
+     * 现在这条补投的**唯一负责人**是 [SettingsViewModel.deleteProfiles](引擎空闲且服务已拆时);
+     * 「计时 → 空闲」那一瞬间的投递归服务侧的 `tearDownToIdle`,两侧用 serviceAttached 单侧仲裁。
      */
     @Test fun archivingSelectedClockRefreshesIdleNotification() = runBlocking {
         val live = clock("在用")

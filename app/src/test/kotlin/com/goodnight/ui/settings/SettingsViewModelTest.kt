@@ -2,6 +2,7 @@ package com.goodnight.ui.settings
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.goodnight.data.ProfileRemoval
 import com.goodnight.data.ReminderIntensity
 import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
@@ -84,14 +85,17 @@ class SettingsViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "sv3")
         g.bootstrap()
         val vm = SettingsViewModel(g)
-        // #3 首装空库:先自建“最后一条”,拒删语义不变
+        // #3 首装空库:先自建“最后一条”,拒删语义不变(归档同样让活跃列表清零)
         vm.createProfile("A", 25, 5, ProfileMode.COUNTDOWN)
         val only = g.profileRepo.profiles.first().first()
-        assertFalse(vm.deleteProfile(only)) // 最后一条拒删
+        assertNull("最后一条拒删", vm.deleteProfile(only))
         vm.createProfile("B", 50, 10, ProfileMode.COUNTDOWN)
         g.engine.restore(snap(EngineStatus.PAUSED, profileId = only.id))
-        assertTrue(vm.deleteProfile(only)) // 暂停中的活跃配置:先 reset 再删
-        assertEquals(1, g.profileRepo.profiles.first().size)
+        // v2.2 Task 5 复审修复:暂停中正在用的时钟 → 归档(不停机、不真删)
+        assertEquals(ProfileRemoval.Archived, vm.deleteProfile(only))
+        assertTrue("行保留且归档", g.profileRepo.byId(only.id)!!.archived)
+        assertEquals("活跃时钟只剩另一个", 1, g.profileRepo.countActive())
+        assertEquals("计时继续", only.id, g.engine.snapshot.value?.profileId)
     }
 
     /**

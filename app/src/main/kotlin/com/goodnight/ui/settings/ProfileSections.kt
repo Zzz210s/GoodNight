@@ -2,8 +2,6 @@ package com.goodnight.ui.settings
 
 import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.TaskEntity
-import com.goodnight.timer.EngineStatus
-import com.goodnight.timer.RuntimeSnapshot
 
 /**
  * v2.2 Task 5:时钟管理页的「通用 / 任务专属」两段 + 删除预告的纯计算。
@@ -43,7 +41,7 @@ internal fun clockSections(clocks: List<ProfileEntity>, tasks: List<TaskEntity>)
 }
 
 /**
- * 删除预告:[clocks] 里哪些会**归档**(有历史:会话段或每日合计)、一共保留多少**分钟**。
+ * 删除预告:[clocks] 里哪些会**归档**(有历史,或正被引擎选中)、一共保留多少**分钟**。
  * 归档行不删、账不动,所以文案必须说清「保留多少分钟」而不是「不可撤销」。
  *
  * 分钟数**会话段优先,没有段才用每日合计**:两者记的是同一笔账,相加会重复计数。
@@ -56,10 +54,13 @@ internal data class DeletePlan(
     val archiveMinutes: Long = 0L,
     /** 被「至少保留 1 个活跃时钟」挡下、这次不会变动的行(按钮计数与确认框文案的差额来源) */
     val keptIds: Set<Long> = emptySet(),
+    /** 正被引擎选中、这次会归档的行:确认框据此提醒「当前这段计时会继续」 */
+    val inUseIds: Set<Long> = emptySet(),
 ) {
     val count: Int get() = clocks.size
     val archiveCount: Int get() = archivedIds.size
     val anyArchive: Boolean get() = archivedIds.isNotEmpty()
+    val anyInUse: Boolean get() = inUseIds.isNotEmpty()
     /**
      * 用户**勾选**的条数(按钮上的计数口径):[count] 只是真正要执行的那些,被「至少保留 1 个
      * 活跃时钟」扣下的 [keptIds] 也在勾选里 —— 确认框首句用本值,按钮与正文的两个数字才不会打架。
@@ -78,48 +79,56 @@ private fun historyOf(
 ): Map<Long, Long> = clocks.associate { it.id to (sessionMillis[it.id] ?: dailyTotals[it.id] ?: 0L) }
 
 /**
- * 按「哪些有历史」出计划。[keepId] 非 null 时它**必须留在活跃列表**(既不归档也不真删),
- * 归档分钟数按剩下的归档行重算 —— 否则文案会把被扣掉的那条的分钟数也算进去。
+ * 按「哪些有历史 / 哪些正被引擎选中」出计划。[keepId] 非 null 时它**必须留在活跃列表**
+ * (既不归档也不真删),归档分钟数按剩下的归档行重算 —— 否则文案会把被扣掉的那条的分钟数也算进去。
+ *
+ * [engineProfileId] 非 null = 引擎当前选中的时钟(快照非空只有 RUNNING/PAUSED 两种):它**即使
+ * 没有历史也归档** —— 行真删掉后的结算会写出悬空 profileId(与 [SettingsViewModel.deleteProfile] 同一口径)。
  */
-private fun planOf(clocks: List<ProfileEntity>, history: Map<Long, Long>, keepId: Long?): DeletePlan {
+private fun planOf(
+    clocks: List<ProfileEntity>,
+    history: Map<Long, Long>,
+    keepId: Long?,
+    engineProfileId: Long?,
+): DeletePlan {
     val kept = setOfNotNull(keepId)
-    val archived = history.filter { (id, millis) -> millis > 0L && id !in kept }.keys
-    val planned = clocks.filter { it.id in archived || (it.id !in kept && history.getValue(it.id) == 0L) }
+    val archived = clocks
+        .filter { it.id !in kept && (history.getValue(it.id) > 0L || it.id == engineProfileId) }
+        .map { it.id }
+        .toSet()
     val millis = archived.sumOf { history.getValue(it) }
-    return DeletePlan(planned, archived, (millis + 30_000L) / 60_000L, kept)
+    return DeletePlan(
+        clocks = clocks.filter { it.id !in kept },
+        archivedIds = archived,
+        archiveMinutes = (millis + 30_000L) / 60_000L,
+        keptIds = kept,
+        inUseIds = archived.filter { it == engineProfileId }.toSet(),
+    )
 }
 
 internal fun deletePlan(
     clocks: List<ProfileEntity>,
     sessionMillis: Map<Long, Long>,
     dailyTotals: Map<Long, Long>,
-): DeletePlan = planOf(clocks, historyOf(clocks, sessionMillis, dailyTotals), keepId = null)
+    engineProfileId: Long? = null,
+): DeletePlan = planOf(clocks, historyOf(clocks, sessionMillis, dailyTotals), null, engineProfileId)
 
 /**
- * 选中集 → **真正会执行**的删除计划:有历史的归档,无历史的真删。
+ * 选中集 → **真正会执行**的删除计划:有历史或正被引擎选中的归档,其余真删。
  *
- * 「至少保留 1 个**活跃**时钟」约束**两种结局**(复审修复):归档只是从列表隐藏,把唯一的
- * 活跃时钟归档同样会让活跃列表清零(首页开始键失效)。判据是「选中集覆盖了全部活跃时钟」——
- * 此时留最后一个(与 [com.goodnight.ui.settings.SettingsViewModel.deleteProfile] 同一口径);
- * 还有没选中的活跃时钟时不必保留。
+ * 「至少保留 1 个**活跃**时钟」约束**两种结局**:归档只是从列表隐藏,把唯一的活跃时钟归档同样
+ * 会让活跃列表清零(首页开始键失效)。判据是「选中集覆盖了全部活跃时钟」—— 此时留最后一个
+ * (与 [SettingsViewModel.deleteProfile] 同一口径);还有没选中的活跃时钟时不必保留。
  */
 internal fun planDeletion(
     selected: List<ProfileEntity>,
     activeCount: Int,
     sessionMillis: Map<Long, Long>,
     dailyTotals: Map<Long, Long>,
+    engineProfileId: Long? = null,
 ): DeletePlan = planOf(
     selected,
     historyOf(selected, sessionMillis, dailyTotals),
     keepId = if (selected.size >= activeCount) selected.lastOrNull()?.id else null,
+    engineProfileId = engineProfileId,
 )
-
-/**
- * v2.2 Task 5(复审修复 W1):删除**前**是否必须先停机结算 —— 引擎正**暂停**在这个时钟上。
- *
- * 停机是为了让暂停段的窗口在**行还在库里**的时候落账([EventApplier] 不校验 profile 存在性,
- * 先删行会把结算写成悬空引用)。运行中的时钟卡片不可勾选(也删不掉),所以只管暂停态;
- * 引擎空闲 / 认的是别的时钟 / 已在别的状态时不必动它。
- */
-internal fun needsSettleBeforeDelete(snap: RuntimeSnapshot?, deletedId: Long): Boolean =
-    snap?.profileId == deletedId && snap.status == EngineStatus.PAUSED

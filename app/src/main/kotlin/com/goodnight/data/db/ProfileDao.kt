@@ -64,6 +64,19 @@ interface ProfileDao {
     suspend fun archiveById(id: Long)
 
     /**
+     * v2.2 Task 5(复审修复 W2):「改归属 + 改名」一条带条件的语句 —— 目标作用域已有同名
+     * **活跃**时钟时一行不动(返回 0)。NOT EXISTS 里的 `p2.id != :id` 排除本行自身:同作用域
+     * 改名时自己总会命中查询,不排除就会恒返回 0。
+     * @return 1 = 已写入(值可能与原来相同);0 = 被重名挡住,或行不存在
+     */
+    @Query(
+        "UPDATE profile SET taskId = :taskId, name = :name WHERE id = :id AND NOT EXISTS (" +
+            "SELECT 1 FROM profile p2 WHERE p2.name = :name AND p2.taskId IS :taskId " +
+            "AND p2.archived = 0 AND p2.id != :id)"
+    )
+    suspend fun moveAndRenameIfFree(id: Long, taskId: Long?, name: String): Int
+
+    /**
      * v2.2 Task 5:活跃(未归档)时钟数 —— 「至少保留 1 个」只算界面上看得见的行。
      * 归档行仍在库里(历史要解析它的名字),但不能替活跃时钟挡删除,否则会出现
      * 「列表只剩一个时钟却删不掉」的怪现象。

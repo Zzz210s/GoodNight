@@ -44,7 +44,8 @@
     <string name="clock_scope_label">归属</string>
     <string name="clock_scope_generic">通用</string>
     <string name="clock_name_taken">该归属下已有同名时钟,换个名字</string>
-    <string name="delete_confirm_archive_body">所选 %1$d 个时钟中 %2$d 个有时间记录:改为归档 —— 已记录的 %3$d 分钟会保留,该时钟从列表隐藏;其余 %4$d 个将删除,不可撤销。</string>
+    <string name="delete_confirm_archive_body">所选 %1$d 个时钟中 %2$d 个会归档(有时间记录或正在使用):行保留、从列表隐藏,已记录的 %3$d 分钟不丢;其余 %4$d 个将删除,不可撤销。</string>
+    <string name="delete_confirm_in_use_note">所选时钟正在计时/暂停中:归档后当前这段计时会继续。</string>
     <string name="delete_keep_one">至少保留 1 个时钟:最后一个时钟既不能删除也不能归档。请先新建一个时钟,再来归档或删除这个。</string>
     <string name="delete_keep_one_note">已选 %1$d 个,其中 %2$d 个会保留(至少保留 1 个活跃时钟)。</string>
     <string name="name_label">名称</string>
