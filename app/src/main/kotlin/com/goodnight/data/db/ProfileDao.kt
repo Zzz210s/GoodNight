@@ -21,6 +21,9 @@ interface ProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(rows: List<ProfileEntity>)
     @Query("SELECT * FROM profile ORDER BY createdAt, id") suspend fun getAll(): List<ProfileEntity>
 
+    /** 库内最大时钟 id(空库为 null);导入前记下它即可分辨本批新插入的行,见 [ProfileScopeDedupe] */
+    @Query("SELECT MAX(id) FROM profile") suspend fun maxId(): Long?
+
     // ---- v2.2 Task 1:时钟归属任务 ----
 
     /**

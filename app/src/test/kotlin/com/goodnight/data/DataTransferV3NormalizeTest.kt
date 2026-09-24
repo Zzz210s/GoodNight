@@ -23,6 +23,8 @@ import org.robolectric.annotation.Config
  * [TaskRepository.deleteTask] 同套:保留先到者,后者按数字后缀改名。
  * 先划定的优先顺序:**库内既存行 > 同批导入行**,同批内以 (createdAt, id) 判先到
  * (与库内列表排序同口径,不依赖文件行序);归档行不占名。
+ * 文件里缺 `id` 的行(入库被 autoGenerate 分到新 id)也算同批导入行 —— 否则它们会抢名,
+ * 库里更老的行反被改名,同一作用域留下两个同名活跃时钟(见 [importIdentifiesRowsWithoutIdAsBatch])。
  * 归一化(悬挂 `profile.taskId` 归为通用)必须排在去重之前,否则归为通用后新撞出的同名
  * 会漏掉(见 [importDedupesGenericCollisionCreatedByNormalization])。
  */
@@ -120,6 +122,25 @@ class DataTransferV3NormalizeTest {
         assertEquals(listOf("专注", "专注 (2)", "专注 (3)", "专注"), ps.map { it.name })
     }
 
+    /**
+     * 文件里缺 `id` 的行(解析为 0,入库被 autoGenerate 分到新 id)必须仍算本批导入行:
+     * 否则它们被当成库内既存行去先占名,同一作用域留下两个同名活跃时钟、库里更老的行反被改名。
+     */
+    @Test fun importIdentifiesRowsWithoutIdAsBatch() = runTest {
+        val db = open("missing_id")
+        val existing = db.profileDao().insert(
+            ProfileEntity(name = "专注", workMinutes = 25, restMinutes = 5, createdAt = 1L),
+        )
+        DataTransfer.importJson(db, MISSING_ID_JSON)
+
+        val ps = db.profileDao().getAll().sortedBy { it.id }
+        assertEquals(listOf("专注", "专注 (2)", "专注 (3)"), ps.map { it.name })
+        assertEquals(existing, ps[0].id) // 库内既存(更老)行保留原名
+        assertEquals(listOf(25, 50, 15), ps.map { it.workMinutes })
+        // 同作用域只剩一个活跃的「专注」,且是既存的那行在占名
+        assertEquals(existing, db.profileDao().byNameInScope("专注", null)!!.id)
+    }
+
     private companion object {
         const val DANGLING_JSON = """{"version":3,"exportedAt":1,
             "profiles":[
@@ -156,6 +177,13 @@ class DataTransferV3NormalizeTest {
             "profiles":[
               {"id":1,"name":"专注","workMinutes":25,"restMinutes":5,"createdAt":20,"mode":0,"taskId":null,"archived":0},
               {"id":2,"name":"专注","workMinutes":50,"restMinutes":10,"createdAt":10,"mode":0,"taskId":null,"archived":0}],
+            "dailyTotals":[],"tasks":[],"focusSessions":[]}"""
+
+        /** 两行都缺 `id`(与库内既存行同作用域同名),行序即 createdAt 升序 */
+        const val MISSING_ID_JSON = """{"version":3,"exportedAt":1,
+            "profiles":[
+              {"name":"专注","workMinutes":50,"restMinutes":10,"createdAt":2,"mode":0,"taskId":null,"archived":0},
+              {"name":"专注","workMinutes":15,"restMinutes":3,"createdAt":3,"mode":0,"taskId":null,"archived":0}],
             "dailyTotals":[],"tasks":[],"focusSessions":[]}"""
     }
 }

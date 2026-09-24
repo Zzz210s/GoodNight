@@ -119,6 +119,7 @@ object DataTransfer {
                 mode = o.optInt("mode", 0),
                 // v1/v2 无这两键:时钟一律成为通用、视为未归档
                 taskId = if (o.isNull("taskId")) null else o.optLong("taskId"),
+                // 只认数字 1/0:外部工具写布尔 "archived": true 会被 optInt 读成 0(与 done 同约定)
                 archived = o.optInt("archived", 0) != 0,
             ))
         }
@@ -162,6 +163,9 @@ object DataTransfer {
         db.withTransaction {
             // 任务先入库:段里的 taskId 才能解析到(无外键,顺序只为可读性/自洽)
             db.taskDao().upsertAll(taskRows)
+            // 写前记下最大时钟 id:文件里缺 `id` 的行入库会被 autoGenerate 分到更大的新 id,
+            // 去重靠这个上界把「本批新插入行」与「库内既存行」分开(见 [ProfileScopeDedupe])
+            val maxProfileIdBefore = db.profileDao().maxId() ?: 0L
             db.profileDao().upsertAll(profileRows)
             db.dailyTotalDao().upsertAll(totalRows)
             db.focusSessionDao().insertAllIgnore(sessionRows)
@@ -169,7 +173,7 @@ object DataTransfer {
             db.taskDao().clearDanglingTaskRefs()
             db.profileDao().clearDanglingTaskRefs()
             // 归一化之后再去重:归为通用的时钟可能与目标作用域的既有同级时钟同名(见 ProfileScopeDedupe)
-            ProfileScopeDedupe.apply(db, profileRows)
+            ProfileScopeDedupe.apply(db, profileRows.map { it.id }.toSet(), maxProfileIdBefore)
         }
         return ImportCounts(profiles.length(), totals.length(), sessions.length(), tasks.length())
     }

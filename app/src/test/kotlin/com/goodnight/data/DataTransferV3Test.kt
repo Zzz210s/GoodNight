@@ -88,6 +88,31 @@ class DataTransferV3Test {
         assertEquals(10L, s.startAt)
     }
 
+    /** 任务作用域内的归档行:往返后 taskId/archived 都保留,且归档行不占名(同名活跃行保持原名) */
+    @Test fun roundTripKeepsArchivedClockInTaskScope() = runTest {
+        val src = open("archived_task")
+        val task = TaskRepository(src).create("写周报", now = 1L)!!
+        val archived = src.profileDao().insert(
+            ProfileEntity(
+                name = "专注", workMinutes = 50, restMinutes = 10, createdAt = 1L,
+                taskId = task, archived = true,
+            ),
+        )
+        val active = src.profileDao().insert(
+            ProfileEntity(name = "专注", workMinutes = 25, restMinutes = 5, createdAt = 2L, taskId = task),
+        )
+
+        val json = DataTransfer.exportJson(src)
+        val dst = open("archived_task_rt")
+        DataTransfer.importJson(dst, json)
+
+        val ps = dst.profileDao().getAll()
+        assertEquals(listOf(archived, active), ps.map { it.id })
+        assertEquals(listOf(task, task), ps.map { it.taskId })
+        assertEquals(listOf(true, false), ps.map { it.archived })
+        assertEquals(listOf("专注", "专注"), ps.map { it.name }) // 归档行不占名,活跃行不加后缀
+    }
+
     /** v2(无这两列)导入不报错:时钟全部成为通用并视为未归档,账目与会话逐值不变 */
     @Test fun importV2BackupMakesAllClocksGeneric() = runTest {
         val db = open("v2")
