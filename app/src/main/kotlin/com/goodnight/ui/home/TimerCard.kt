@@ -59,6 +59,7 @@ internal fun TimerCard(
     ui: HomeUiState,
     displayMillis: Long,
     taskTitle: String?,
+    clockName: String?,
     onTaskChipClick: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
@@ -92,7 +93,10 @@ internal fun TimerCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TaskChip(
-                    taskTitle = taskTitle,
+                    // v2.2 Task 4:横带文案 =「任务 · 时钟」;只有时钟时只显时钟名;
+                    // 两者都没有(空库)回退相位文案(空闲/工作中/休息中)
+                    label = timerCardLabel(taskTitle, clockName, stringResource(R.string.timer_chip_pair))
+                        ?: stringResource(phaseRes),
                     enabled = snap != null,
                     onClick = onTaskChipClick,
                     modifier = Modifier.weight(1f, fill = false),

@@ -57,6 +57,40 @@ class TimerCardLayoutTest : TimerCardLayoutHarness() {
         assertChipWithinHalfOfTheRow("长标题", longTitle)
     }
 
+    /**
+     * v2.2 Task 4:横带文案 =「任务 · 时钟」。加了时钟名后 chip 自然宽更长,仍必须一行放下、
+     * 不压相位/循环徽标、不越半行(沿用行的实测宽判定,不用整屏宽)。
+     */
+    @Test fun chipShowsTaskAndClockOnOneLine() {
+        val clockName = "专注 25/5"
+        setCard(longTitle, clockName = clockName)
+        val label = chipLabel(longTitle, clockName)
+        val chip = rule.onNodeWithText(label, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val badge = phaseBounds()
+        val big = rule.onNodeWithText(DurationFormat.ms(bigMillis), useUnmergedTree = true).getUnclippedBoundsInRoot()
+        println("T4 label=$label chip=$chip badge=$badge")
+        assertTrue("chip 右沿 ${chip.right} 必须停在相位徽标左沿 ${badge.left} 之前", chip.right <= badge.left)
+        assertTrue("chip 底沿 ${chip.bottom} 必须在大数字顶沿 ${big.top} 之上", chip.bottom <= big.top)
+        assertChipWithinHalfOfTheRow("任务 · 时钟", label)
+    }
+
+    /** 只有时钟(未绑任务):文案只有时钟名,不带分隔符 */
+    @Test fun chipShowsClockAloneWhenTaskUnbound() {
+        setCard(null, clockName = "专注")
+        val label = chipLabel(null, "专注")
+        assertEquals("只有时钟名,不带分隔符", "专注", label)
+        val row = rowBounds()
+        val chip = rule.onNodeWithText(label, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        println("T4 clock-only row=$row chip=$chip")
+        assertTrue("chip 左沿 ${chip.left} 应贴在行左侧(非居中)", chip.left.value <= row.left.value + row.width.value / 4f)
+    }
+
+    /** 都没有(空库):回退既有相位文案(相位徽标只有 contentDescription,不产生同名文本节点) */
+    @Test fun chipFallsBackToPhaseTextWithoutClockAndTask() {
+        setCardWithoutClocks()
+        rule.onNodeWithText(ctx.getString(R.string.state_idle), useUnmergedTree = true).assertExists()
+    }
+
     /** COUNTUP 路径(建议项:旧布局测试只覆盖倒计时):无到期/循环概念 -> 循环徽标不渲染、
      *  skip 键隐藏,而相位徽标仍贴行右沿。snap.countUp 与 profile.mode 两条判定路径同时走。 */
     @Test fun countUpHidesCycleBadgeAndSkipKeyKeepingPhaseAtRowRightEdge() {

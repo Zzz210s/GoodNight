@@ -10,6 +10,10 @@ import com.goodnight.timer.EnginePolicy
 import com.goodnight.timer.PolicyAction
 import com.goodnight.timer.RuntimeSnapshot
 import com.goodnight.timer.TimeProvider
+import com.goodnight.ui.tasks.ClockSwitchPrompt
+import com.goodnight.ui.tasks.PendingClockSwitch
+import com.goodnight.ui.tasks.TaskClocks
+import com.goodnight.ui.tasks.splitClocks
 import java.time.LocalDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +31,11 @@ data class HomeUiState(
     val ready: Boolean = false,
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfileId: Long = -1,
+    /**
+     * v2.2 Task 4:计时卡横带显示的时钟 id —— 有会话(运行/暂停)时取**运行快照的时钟**(真值),
+     * 空闲时取 [activeProfileId](将要用哪个时钟)。两者由启动/换时钟时的镜像写入保持一致。
+     */
+    val clockId: Long = -1,
     val snap: RuntimeSnapshot? = null,
     val todayMillis: Long = 0,
     val days: Map<LocalDate, Long> = emptyMap(),
@@ -47,10 +56,12 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
         graph.engine.snapshot,
         graph.totalsRepo.dayTotals(from),
     ) { ready, profiles, active, snap, totals ->
+        val activeId = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: -1
         HomeUiState(
             ready = ready,
             profiles = profiles,
-            activeProfileId = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: -1,
+            activeProfileId = activeId,
+            clockId = displayedClockId(snap, activeId),
             snap = snap,
             todayMillis = totals.firstOrNull { it.date == today.toString() }?.total ?: 0,
             days = totals.associate { LocalDate.parse(it.date) to it.total },
@@ -91,6 +102,36 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
     val taskPickerOpen: StateFlow<Boolean> = _taskPickerOpen.asStateFlow()
     fun onOpenTaskPicker() { _taskPickerOpen.value = true }
     fun onDismissTaskPicker() { _taskPickerOpen.value = false }
+
+    // ---- v2.2 Task 4:计时卡显示的时钟 + 计时中换时钟的确认 ----
+
+    /**
+     * 选择器里的可用时钟 = **当前绑定任务**的作用域时钟(该任务专属 + 全部通用),
+     * 与任务卡片同一口径([com.goodnight.data.ProfileRepository.availableFor]);
+     * 未绑任务时只有通用时钟 —— 换时钟不会把会话带到别的任务上。
+     */
+    val availableClocks: StateFlow<TaskClocks> = graph.engine.snapshot
+        .map { it?.taskId }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> graph.profileRepo.availableFor(id).map { splitClocks(it) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TaskClocks())
+
+    private val clockSwitch = ClockSwitchPrompt(graph)
+
+    /** 非空 = 弹「终止当前并开始新的?」确认;**未确认前不发任何命令** */
+    val pendingClockSwitch: StateFlow<PendingClockSwitch?> get() = clockSwitch.pending
+
+    /**
+     * 点选择器里的时钟:有会话(运行/暂停)先确认,确认后由 [ClockSwitchPrompt] 发一条换时钟命令,
+     * 新会话**沿用当前绑定任务**;空闲时只是改选(与顶栏面板选中同语义,不起画)。
+     */
+    fun onPickClock(clock: ProfileEntity) {
+        _taskPickerOpen.value = false
+        clockSwitch.pickKeepingBinding(clock) { clockSwitch.mirror(clock.id) }
+    }
+
+    fun onConfirmClockSwitch() = clockSwitch.confirm()
+    fun onDismissClockSwitch() = clockSwitch.dismiss()
 
     /**
      * 选择/解绑当前任务(null = 不绑定)。计时中切换由引擎按切点切段(§3 语义,引擎已实现);

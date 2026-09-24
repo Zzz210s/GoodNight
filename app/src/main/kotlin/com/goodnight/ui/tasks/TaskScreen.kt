@@ -59,6 +59,8 @@ fun TaskScreen(onBack: () -> Unit) {
     val clocksByTask by vm.clocksByTask.collectAsStateWithLifecycle()
     val addClockTaskId by vm.addClockTaskId.collectAsStateWithLifecycle()
     val clockError by vm.clockError.collectAsStateWithLifecycle()
+    // v2.2 Task 4:计时中点另一个时钟 -> 先确认(未确认前不发命令)
+    val pendingClockSwitch by vm.pendingClockSwitch.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<TaskEntity?>(null) }
 
@@ -149,6 +151,9 @@ fun TaskScreen(onBack: () -> Unit) {
             onDismiss = vm::onAddClockDismiss,
             onConfirm = { name, work, rest, mode -> vm.onCreateClock(taskId, name, work, rest, mode) },
         )
+    }
+    if (pendingClockSwitch != null) {
+        ClockSwitchDialog(onConfirm = vm::onConfirmClockSwitch, onDismiss = vm::onDismissClockSwitch)
     }
 }
 

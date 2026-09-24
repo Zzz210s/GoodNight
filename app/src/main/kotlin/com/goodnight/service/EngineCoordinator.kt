@@ -155,6 +155,8 @@ class EngineCoordinator(private val graph: AppGraph) {
                 graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
                 if (wasIdle && cmd.taskId != null) graph.engine.setTask(cmd.taskId)
             }
+            // v2.2 Task 4:换时钟 = 同一临界区内「终止当前段 + 按新时钟开始」(不新增切点类型)
+            ACTION_SWITCH_CLOCK -> applyClockSwitch(graph.engine, cmd)
             ACTION_PAUSE -> graph.engine.pause()
             ACTION_RESUME -> graph.engine.resume()
             ACTION_STOP -> {

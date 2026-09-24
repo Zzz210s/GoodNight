@@ -49,6 +49,39 @@ object TimerCommands {
             .putExtra(EXTRA_COUNT_UP, countUp)
             .putExtra(EXTRA_TASK_ID, taskId ?: NO_TASK_ID)
 
+    /**
+     * v2.2 Task 4:计时中换时钟 —— **一条**命令内「终止当前 + 重新开始」(设计 §4 拍板 1)。
+     * 不用「STOP 再 START」两条 intent:STOP 会走拆除握手(脱前台 + 空闲通知 + stopSelf),
+     * 换时钟语义上从不进入空闲态,前台通知会闪掉,且两条 intent 的到达顺序不在契约内。
+     */
+    fun switchClock(
+        context: Context,
+        profileId: Long,
+        workMillis: Long,
+        restMillis: Long,
+        countUp: Boolean = false,
+        taskId: Long? = null,
+    ) {
+        context.startForegroundService(
+            switchClockIntent(context, profileId, workMillis, restMillis, countUp, taskId),
+        )
+    }
+
+    internal fun switchClockIntent(
+        context: Context,
+        profileId: Long,
+        workMillis: Long,
+        restMillis: Long,
+        countUp: Boolean = false,
+        taskId: Long? = null,
+    ) =
+        intent(context, ACTION_SWITCH_CLOCK)
+            .putExtra(EXTRA_PROFILE_ID, profileId)
+            .putExtra(EXTRA_WORK_MILLIS, workMillis)
+            .putExtra(EXTRA_REST_MILLIS, restMillis)
+            .putExtra(EXTRA_COUNT_UP, countUp)
+            .putExtra(EXTRA_TASK_ID, taskId ?: NO_TASK_ID)
+
     internal fun restartPhaseIntent(context: Context, profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean) =
         intent(context, ACTION_RESTART_PHASE)
             .putExtra(EXTRA_PROFILE_ID, profileId)

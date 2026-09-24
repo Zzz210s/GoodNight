@@ -163,4 +163,12 @@
     <string name="task_add_clock">添加时钟</string>
     <string name="task_clock_legend">无边框 = 专属时钟,淡色 = 通用时钟</string>
     <string name="task_clock_name_taken">该任务下已有同名时钟,换个名字</string>
+    <!-- 计时卡(v2.2 Task 4):「任务 · 时钟」横带 + 换时钟确认 -->
+    <string name="timer_chip_pair">%1$s · %2$s</string>
+    <string name="timer_picker_title">任务与时钟</string>
+    <string name="clock_section_label">时钟</string>
+    <string name="clock_group_generic">通用时钟</string>
+    <string name="clock_group_specific">任务专属时钟</string>
+    <string name="clock_switch_title">换时钟</string>
+    <string name="clock_switch_confirm">终止当前并开始新的?</string>
 </resources>

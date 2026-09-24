@@ -51,7 +51,12 @@ abstract class TimerCardLayoutHarness {
     /** setContent 时从 LocalDensity 读到的 fontScale:确认字号轴确实生效(防用例静默退化) */
     protected var observedFontScale = 1f
 
-    protected fun setCard(taskTitle: String?, mode: Int = ProfileMode.COUNTDOWN, snap: RuntimeSnapshot? = null) {
+    protected fun setCard(
+        taskTitle: String?,
+        clockName: String? = null,
+        mode: Int = ProfileMode.COUNTDOWN,
+        snap: RuntimeSnapshot? = null,
+    ) {
         val profile = ProfileEntity(
             id = 1, name = "P", workMinutes = 12_000, restMinutes = 5, mode = mode, createdAt = 0,
         )
@@ -62,6 +67,7 @@ abstract class TimerCardLayoutHarness {
                     ui = HomeUiState(ready = true, profiles = listOf(profile), activeProfileId = 1, snap = snap),
                     displayMillis = bigMillis,
                     taskTitle = taskTitle,
+                    clockName = clockName,
                     onTaskChipClick = {},
                     onStart = {}, onPause = {}, onResume = {}, onSkip = {}, onStop = {},
                     onGoSettings = {},
@@ -69,6 +75,27 @@ abstract class TimerCardLayoutHarness {
             }
         }
     }
+
+    /** 空库(还没有时钟、也没有任务):横带文案回退相位文本 */
+    protected fun setCardWithoutClocks() {
+        rule.setContent {
+            MaterialTheme {
+                TimerCard(
+                    ui = HomeUiState(ready = true, profiles = emptyList(), activeProfileId = -1),
+                    displayMillis = bigMillis,
+                    taskTitle = null,
+                    clockName = null,
+                    onTaskChipClick = {},
+                    onStart = {}, onPause = {}, onResume = {}, onSkip = {}, onStop = {},
+                    onGoSettings = {},
+                )
+            }
+        }
+    }
+
+    /** chip 文案与标签文本的对应(测试里跟产品同一套规则,不写死拼接) */
+    protected fun chipLabel(taskTitle: String?, clockName: String?) =
+        timerCardLabel(taskTitle, clockName, ctx.getString(R.string.timer_chip_pair))!!
 
     protected fun rowBounds() = rule.onNodeWithTag(TIMER_TOP_ROW_TAG).getUnclippedBoundsInRoot()
 

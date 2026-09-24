@@ -40,6 +40,7 @@ import com.goodnight.timer.EngineStatus
 import com.goodnight.ui.heatmap.Heatmap
 import com.goodnight.ui.heatmap.buildHeatmapModel
 import com.goodnight.ui.report.ReportRange
+import com.goodnight.ui.tasks.ClockSwitchDialog
 import com.goodnight.ui.tasks.TaskPicker
 import com.goodnight.ui.theme.MotionTokens
 import com.goodnight.ui.theme.rememberAnimationsEnabled
@@ -63,6 +64,9 @@ fun HomeScreen(
     val currentTask by vm.currentTask.collectAsStateWithLifecycle()
     val pickerTasks by vm.pickerTasks.collectAsStateWithLifecycle()
     val taskPickerOpen by vm.taskPickerOpen.collectAsStateWithLifecycle()
+    // v2.2 Task 4:选择器里的可用时钟(当前绑定的作用域)+ 计时中换时钟的确认状态
+    val clocks by vm.availableClocks.collectAsStateWithLifecycle()
+    val pendingClockSwitch by vm.pendingClockSwitch.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     // Task 7 / #10:数字位 = 倒计时剩余 / 正计时已走(计到快照,暂停定格)。
@@ -119,6 +123,8 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             TimerCard(ui, displayMillis, taskTitle = currentTask?.title,
+                // v2.2 Task 4:横带时钟名 = 运行快照的时钟(真值);空闲时 = 选中的时钟
+                clockName = ui.profiles.firstOrNull { it.id == ui.clockId }?.name,
                 onTaskChipClick = { vm.onOpenTaskPicker() }, onStart = {
                 ui.profiles.firstOrNull { it.id == ui.activeProfileId }?.let { p ->
                     TimerCommands.start(
@@ -159,16 +165,23 @@ fun HomeScreen(
             }
 
     }
-        // v2.1 Task 7:任务选择器(任务列表 + 「不绑定」);选中即发 SET_TASK 命令
+        // v2.1 Task 7 / v2.2 Task 4:任务与时钟选择器(时钟按任务分组,通用时钟单独一组);
+        // 列表与打勾口径见 [HomeViewModel.pickerTasks]:绑定任务已归档时也列出来并打勾;
+        // 已删任务解析不到实体(currentTask == null)→ selectedId 传 null,「不绑定」打勾
         if (taskPickerOpen) {
-            // 列表与打勾口径见 [HomeViewModel.pickerTasks]:绑定任务已归档时也列出来并打勾;
-            // 已删任务解析不到实体(currentTask == null)→ selectedId 传 null,「不绑定」打勾
             TaskPicker(
                 tasks = pickerTasks,
                 selectedId = currentTask?.id,
                 onPick = vm::onPickTask,
                 onDismiss = vm::onDismissTaskPicker,
+                clocks = clocks,
+                runningClockId = ui.snap?.profileId,
+                onPickClock = vm::onPickClock,
             )
+        }
+        // v2.2 Task 4:计时中点另一个时钟 -> 先确认(未确认前不发命令)
+        if (pendingClockSwitch != null) {
+            ClockSwitchDialog(onConfirm = vm::onConfirmClockSwitch, onDismiss = vm::onDismissClockSwitch)
         }
     }
 }

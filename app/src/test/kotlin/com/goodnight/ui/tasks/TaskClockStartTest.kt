@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
 import com.goodnight.service.ACTION_START
+import com.goodnight.service.ACTION_SWITCH_CLOCK
 import com.goodnight.service.EXTRA_COUNT_UP
 import com.goodnight.service.EXTRA_PROFILE_ID
 import com.goodnight.service.EXTRA_REST_MILLIS
@@ -17,6 +18,7 @@ import com.goodnight.timer.Phase
 import com.goodnight.timer.RuntimeSnapshot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -37,8 +39,10 @@ import org.robolectric.annotation.Config
  *
  * 1. 空闲且引擎就绪 = 发**既有命令入口**([com.goodnight.service.TimerCommands.start]),命令里同时
  *    带上卡片任务 id 与该 chip 的时钟 id —— 用 intent extra 断言(服务->协调器->引擎,不直接调引擎);
- * 2. 计时中 no-op:静默换时钟会让 45/15 与 25/5 混在同一段里,换时钟确认流程是 Task 4 的范围;
- * 3. `engine.ready` 为 false(冷启动 restore() 未完成)也 no-op:此时快照为空,放行会把尚未恢复的
+ * 2. 计时中点击**另一个**时钟不再 no-op:先弹确认、未确认不发任何命令(v2.2 Task 4),确认后
+ *    发一条换时钟命令(协调器同一把锁内先终止结算再开始);
+ * 3. 点 chip 启动把选中时钟镜像写回首页高亮(指针 1:顶栏高亮与运行时钟同源);
+ * 4. `engine.ready` 为 false(冷启动 restore() 未完成)也 no-op:此时快照为空,放行会把尚未恢复的
  *    运行快照覆盖掉(`engine.start` -> `save()`),丢掉本段未落账的时间。
  */
 @RunWith(RobolectricTestRunner::class)
@@ -59,11 +63,11 @@ class TaskClockStartTest {
 
     private fun vm() = TaskListViewModel(g)
     private suspend fun newTask(title: String) = g.taskRepo.create(title, g.time.now())!!
-    private suspend fun newClock(name: String, taskId: Long?, mode: Int = ProfileMode.COUNTDOWN) =
+    private suspend fun newClock(name: String, taskId: Long? = null, mode: Int = ProfileMode.COUNTDOWN) =
         g.profileRepo.create(name, 25, 5, mode, taskId)!!
 
-    private fun snap(status: EngineStatus) = RuntimeSnapshot(
-        profileId = 1, workMillis = 60_000, restMillis = 30_000, phase = Phase.WORK, status = status,
+    private fun snap(status: EngineStatus, profileId: Long = 1L) = RuntimeSnapshot(
+        profileId = profileId, workMillis = 60_000, restMillis = 30_000, phase = Phase.WORK, status = status,
         cycleCount = 0, startElapsed = 0, endElapsed = 60_000, endWall = 0,
         timeSpentPaused = 0, lastPauseTime = 0, timeAtPause = 0,
         savedAtWall = 0, savedAtElapsed = 0, ckptDate = null, ckptAccum = 0,
@@ -121,14 +125,68 @@ class TaskClockStartTest {
         }
     }
 
-    /** 计时中不静默换时钟(Task 4 之前只要求「运行中点 chip 不发出任何命令」) */
-    @Test fun startIsIgnoredWhileTimerRuns() = runTest {
+    /**
+     * v2.2 Task 4:计时中点另一个时钟不再静默 no-op,改为**先弹确认**(设计 §4 拍板 1)。
+     * 未确认前一条命令都不发;确认后发**一条** [ACTION_SWITCH_CLOCK] —— 新会话记
+     * 「这张卡片的任务 + 该时钟」(协调器在同一把锁内先终止结算再开始)。
+     */
+    @Test fun switchingClockWhileRunningAsksBeforeAnyCommand() = runTest {
+        val running = g.profileRepo.byId(newClock("通用 25/5"))!!
         val a = newTask("写周报")
         val clock = g.profileRepo.byId(newClock("A 专属", taskId = a))!!
-        g.engine.restore(snap(EngineStatus.RUNNING))
+        g.engine.restore(snap(EngineStatus.RUNNING, profileId = running.id))
+        val model = vm()
 
-        vm().onStartClock(a, clock)
+        model.onStartClock(a, clock)
 
-        assertNull("运行中不得发出开始命令", shadowOf(app).nextStartedService)
+        assertEquals(PendingClockSwitch(clock, a), model.pendingClockSwitch.value)
+        assertNull("未确认前不得发出任何命令", shadowOf(app).nextStartedService)
+
+        model.onConfirmClockSwitch()
+
+        val cmd = shadowOf(app).nextStartedService
+        assertEquals(ACTION_SWITCH_CLOCK, cmd.action)
+        assertEquals(clock.id, cmd.getLongExtra(EXTRA_PROFILE_ID, -1L))
+        assertEquals("任务由卡片决定", a, cmd.getLongExtra(EXTRA_TASK_ID, NO_TASK_ID))
+        assertNull("一条命令内完成「终止 + 开始」", shadowOf(app).nextStartedService)
+    }
+
+    /** 取消 = 零命令(不终止、不开始) */
+    @Test fun dismissingChipSwitchSendsNothing() = runTest {
+        val running = g.profileRepo.byId(newClock("通用 25/5"))!!
+        val a = newTask("写周报")
+        val clock = g.profileRepo.byId(newClock("A 专属", taskId = a))!!
+        g.engine.restore(snap(EngineStatus.RUNNING, profileId = running.id))
+        val model = vm()
+        model.onStartClock(a, clock)
+
+        model.onDismissClockSwitch()
+
+        assertNull(model.pendingClockSwitch.value)
+        assertNull("取消不得发出任何命令", shadowOf(app).nextStartedService)
+        assertEquals("运行时钟未变", running.id, g.engine.snapshot.value!!.profileId)
+    }
+
+    /**
+     * 指针 1:点 chip 启动同样要**同步写回首页高亮的时钟** —— 否则顶栏一直亮着旧选中的时钟,
+     * 与正在跑的时钟不一致(首页高亮的读取点在 HomeTopBar/HomePanel,属于 Task 5 的文件)。
+     *
+     * 自带一张图与**唯一的 store 文件名**:DataStore 单例按文件名缓存,同类其它用例也建图,
+     * 共用文件名会撞「multiple DataStores active for the same file」。
+     */
+    @Test fun startingFromChipMirrorsActiveClock() = runTest {
+        val own = AppGraph(ctx, useInMemoryDb = true, storeFileName = "task_clock_mirror")
+        try {
+            own.engine.restore(null)
+            val a = own.taskRepo.create("写周报", own.time.now())!!
+            val clock = own.profileRepo.byId(own.profileRepo.create("A 专属", 25, 5, ProfileMode.COUNTDOWN, a)!!)!!
+
+            TaskListViewModel(own).onStartClock(a, clock)
+
+            assertEquals(ACTION_START, shadowOf(app).nextStartedService.action)
+            assertEquals("启动即镜像写回首页高亮", clock.id, own.settingsRepo.activeProfileId.first { it == clock.id })
+        } finally {
+            runBlocking { own.appScope.coroutineContext.job.cancelAndJoin(); own.db.close() }
+        }
     }
 }

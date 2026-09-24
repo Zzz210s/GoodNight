@@ -26,19 +26,13 @@ import kotlinx.coroutines.launch
 enum class TaskInputError { BLANK, TOO_LONG }
 
 /**
- * 删除确认载荷:[minutes] = 该任务已记录的分钟数(四舍五入到整分)= 已落库段落 + **在途工作段**
- * (运行中删当前绑定任务时本段尚未落库,见 [inFlightMillisFor])。
- */
-data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long)
-
-/**
  * v2.1 Task 6:任务页 VM。列表读仓库的活跃/已完成两条流,写操作全部走 [TaskRepository] 事务。
  *
  * 写操作一律在协程内**从库里读现况**(不依赖被订阅的 StateFlow 当前值)——
  * `WhileSubscribed` 在无人订阅时 `.value` 还是初始空表,据此判完成态会翻反。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
+class TaskListViewModel(internal val graph: AppGraph) : ViewModel() {
     val active: StateFlow<List<TaskEntity>> = graph.taskRepo.observeActive()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -48,8 +42,10 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
     private val _inputError = MutableStateFlow<TaskInputError?>(null)
     val inputError: StateFlow<TaskInputError?> = _inputError.asStateFlow()
 
-    private val _deletePrompt = MutableStateFlow<TaskDeletePrompt?>(null)
-    val deletePrompt: StateFlow<TaskDeletePrompt?> = _deletePrompt.asStateFlow()
+    internal val deletePromptState = MutableStateFlow<TaskDeletePrompt?>(null)
+
+    /** 删除确认载荷(读写入口见 [onDeleteRequest] / [onDeleteConfirmed],同文件 TaskDeleteActions.kt) */
+    val deletePrompt: StateFlow<TaskDeletePrompt?> = deletePromptState.asStateFlow()
 
     // ---- v2.2 Task 3:任务卡片上的时钟 ----
 
@@ -90,20 +86,35 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
+    // ---- v2.2 Task 4:计时中换时钟的确认闸门(与计时卡共用同一份实现) ----
+
+    private val clockSwitch = ClockSwitchPrompt(graph)
+
+    /** 非空 = 弹「终止当前并开始新的?」确认;**未确认前不发任何命令** */
+    val pendingClockSwitch: StateFlow<PendingClockSwitch?> get() = clockSwitch.pending
+
+    fun onConfirmClockSwitch() = clockSwitch.confirm()
+
+    fun onDismissClockSwitch() = clockSwitch.dismiss()
+
     /**
-     * 空闲时点 chip 即开始:会话同时记下该卡片的任务与该 chip 的时钟,两者搭在**同一条 START
-     * 命令**上(服务 -> [com.goodnight.service.EngineCoordinator],引擎的唯一驱动者 + 同一把 mutex)。
-     * 计时进行中一律 no-op(换时钟的确认流程是 Task 4);`engine.ready` 未就绪也 no-op —— 冷启动
-     * restore() 前快照为空,放行会覆盖尚未恢复的运行快照(engine.start -> save())并丢掉本段未落账时间。
+     * 点卡片上的时钟 chip:空闲 = 起画(任务由卡片决定,时钟搭在同一条 START 上);
+     * 已有会话(运行/暂停)= **先确认** —— 静默换时钟会让 45/15 与 25/5 混在同一段里;
+     * 确认后发一条换时钟命令,新会话绑定**这张卡片的任务**。
+     * `engine.ready` 未就绪一律 no-op(由 [ClockSwitchPrompt] 把关):冷启动 restore() 前快照为空,
+     * 放行会覆盖尚未恢复的运行快照(`engine.start` -> `save()`)并丢掉本段未落账时间。
      */
     fun onStartClock(taskId: Long, clock: ProfileEntity) {
-        if (!graph.engine.ready.value) return
-        val snap = graph.engine.snapshot.value
-        if (snap != null && snap.status != EngineStatus.IDLE) return
+        clockSwitch.pickForTask(clock, taskId) { startClock(clock, taskId) }
+    }
+
+    private fun startClock(clock: ProfileEntity, taskId: Long) {
         TimerCommands.start(
             graph.appContext, clock.id, clock.workMinutes * 60_000L, clock.restMinutes * 60_000L,
             countUp = clock.mode == ProfileMode.COUNTUP, taskId = taskId,
         )
+        // 指针 1:启动即镜像写回首页高亮的时钟(顶栏的读取点在 HomeTopBar/HomePanel,属 Task 5)
+        clockSwitch.mirror(clock.id)
     }
 
     /** 与 [TaskRepository.create] 同口径:去首尾空白后空为 BLANK、超长为 TOO_LONG */
@@ -156,44 +167,4 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
             graph.taskRepo.moveTo(task.id, to, list)
         }
     }
-
-    /** 弹删除确认:先取该任务已记录的分钟数(含在途,查询失败/任务已不在则不开弹窗) */
-    fun onDeleteRequest(id: Long) {
-        viewModelScope.launch {
-            val title = graph.taskRepo.titleById(id) ?: return@launch
-            _deletePrompt.value = TaskDeletePrompt(id, title, recordedMinutes(id))
-        }
-    }
-
-    fun onDeleteDismiss() { _deletePrompt.value = null }
-
-    fun onDeleteConfirmed() {
-        val id = _deletePrompt.value?.id
-        _deletePrompt.value = null
-        if (id != null) onDelete(id)
-    }
-
-    /**
-     * 删除:若运行态正绑着这个任务,必须先 [com.goodnight.timer.TimerEngine.setTask] 解绑 ——
-     * 否则删除后结算会把已删 id 写进段落(孤儿引用)。库内引用由
-     * [TaskRepository.deleteTask] 同事务置空,时间账保留为未绑定。
-     */
-    fun onDelete(id: Long) {
-        viewModelScope.launch {
-            if (graph.engine.snapshot.value?.taskId == id) graph.engine.setTask(null)
-            graph.taskRepo.deleteTask(id)
-            graph.coordinator.notifier.refreshTaskTitle()
-        }
-    }
-
-    /**
-     * 该任务已记录的分钟数(四舍五入到整分):删除确认文案「已记录的 N 分钟」用。
-     * = 已落库段落 + 在途工作段 —— 删除后两部分都以未绑定保留,口径必须一致。
-     */
-    suspend fun recordedMinutes(id: Long): Long =
-        (graph.taskRepo.recordedMillis(id) + inFlightMillis(id) + 30_000L) / 60_000L
-
-    /** 在途工作毫秒:当前绑定就是 [id] 且引擎在 WORK 段时为该段归属本任务的时长,否则 0 */
-    fun inFlightMillis(id: Long): Long =
-        graph.engine.snapshot.value?.let { inFlightMillisFor(it, id, graph.time.now()) } ?: 0L
 }

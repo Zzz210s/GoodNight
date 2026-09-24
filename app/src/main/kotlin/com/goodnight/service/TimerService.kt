@@ -60,13 +60,16 @@ class TimerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
+        // START / SWITCH_CLOCK 都是「马上就会有大快照」的命令:换时钟中途快照会瞬时为空,
+        // 标志位避免观察者把它当空闲收尾(脱前台 + 空闲通知 + stopSelf)
+        val starting = action == ACTION_START || action == ACTION_SWITCH_CLOCK
         if (action == ACTION_ACK) {
             // 通知"对号"确认:只清除提醒通知,不改计时状态
             TimerNotifIdle.cancel(this)
             return START_STICKY
         }
         com.goodnight.diag.DiagLog.add("Svc", "onStartCommand action=${action ?: "null(对账)"}")
-        if (action == ACTION_START) awaitingSnapshot = true
+        if (starting) awaitingSnapshot = true
         firstCommandReceived.complete(Unit)
         // 前台化纪律:异步处理前先同步前台化(无快照时用最小通知)
         startForegroundCompat(TimerNotifications.inProgressOrMinimal(this, g.engine.snapshot.value))
@@ -83,7 +86,7 @@ class TimerService : Service() {
                 coordinator.run(intent.toTimerCommand(action))
                 if (action == ACTION_STOP) awaitStopDrainedAndTearDown()
             } finally {
-                if (action == ACTION_START) awaitingSnapshot = false
+                if (starting) awaitingSnapshot = false
                 if (action == ACTION_STOP) stopDraining = false
             }
         }

@@ -163,4 +163,12 @@
     <string name="task_add_clock">Add clock</string>
     <string name="task_clock_legend">No outline = this task\'s, pale = shared</string>
     <string name="task_clock_name_taken">A clock with this name already exists for this task. Pick another name.</string>
+    <!-- timer card (v2.2 Task 4): "task · clock" chip + clock switching confirmation -->
+    <string name="timer_chip_pair">%1$s · %2$s</string>
+    <string name="timer_picker_title">Tasks and clocks</string>
+    <string name="clock_section_label">Clocks</string>
+    <string name="clock_group_generic">Shared clocks</string>
+    <string name="clock_group_specific">Task clocks</string>
+    <string name="clock_switch_title">Switch clock</string>
+    <string name="clock_switch_confirm">Stop the current one and start the new one?</string>
 </resources>

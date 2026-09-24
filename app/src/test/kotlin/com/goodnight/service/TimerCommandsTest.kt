@@ -42,6 +42,23 @@ class TimerCommandsTest {
         assertEquals(42L, bound.toTimerCommand(ACTION_START).taskId)
     }
 
+    /**
+     * v2.2 Task 4:换时钟的命令载荷与 start 同形(时钟/工作/休息/模式/任务),但 action 不同 ——
+     * 服务据此在同一把锁内「终止当前 + 重新开始」(不新增切点类型)。
+     */
+    @Test fun switchClockIntentCarriesClockAndTask() {
+        val plain = TimerCommands.switchClockIntent(ctx, 3L, 60_000L, 20_000L)
+        assertEquals(ACTION_SWITCH_CLOCK, plain.action)
+        assertEquals(3L, plain.getLongExtra(EXTRA_PROFILE_ID, -1L))
+        assertEquals(60_000L, plain.getLongExtra(EXTRA_WORK_MILLIS, 0L))
+        assertEquals(20_000L, plain.getLongExtra(EXTRA_REST_MILLIS, 0L))
+        assertFalse(plain.getBooleanExtra(EXTRA_COUNT_UP, false))
+        assertNull("未绑定任务用哨兵值,解析回 null", plain.toTimerCommand(ACTION_SWITCH_CLOCK).taskId)
+        val bound = TimerCommands.switchClockIntent(ctx, 3L, 60_000L, 20_000L, countUp = true, taskId = 42L)
+        assertTrue(bound.getBooleanExtra(EXTRA_COUNT_UP, false))
+        assertEquals(42L, bound.toTimerCommand(ACTION_SWITCH_CLOCK).taskId)
+    }
+
     /** v2.1 Task 7:任务切换命令携带任务 id(「不绑定」用哨兵值表达 null,解析回 null) */
     @Test fun setTaskIntentCarriesTaskId() {
         val bound = TimerCommands.setTaskIntent(ctx, 42L)
