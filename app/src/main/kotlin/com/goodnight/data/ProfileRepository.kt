@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.Flow
 /** v2.2 Task 1:删时钟的两种结局 —— 无任何历史 → 真删;有历史(会话段或每日合计)→ 归档 */
 enum class ProfileRemoval { Deleted, Archived }
 
+/**
+ * v2.2:时钟的「作用域内唯一」**只由本仓库保证** —— 库里 `profile.name` 的唯一索引已去掉
+ * (SQLite 唯一索引把 NULL 视为互不相同,表达不了「通用时钟之间也唯一」),
+ * 所有写入口([create]/[rename]/[moveTo]/[TaskRepository.deleteTask])都必须过这里的同名判定。
+ */
 class ProfileRepository(
     private val dao: ProfileDao,
     private val time: TimeProvider,
@@ -46,15 +51,16 @@ class ProfileRepository(
     }
 
     /**
-     * v2.2:改归属,不碰任何历史记录。
-     * 目标作用域已有同名**活跃**时钟时保持原归属(静默不改):作用域内唯一是仓库层不变量,
-     * 否则这一操作能造出「同一任务下两个同名时钟」。调用方(管理页)需用 [availableFor] 自查后提示。
+     * v2.2:改归属,不碰任何历史记录。**不校验目标任务是否存在**(前置条件由调用方保证)。
+     * @return true = 已改归属或本来就在目标作用域;false = 目标作用域已有同名**活跃**时钟
+     * (保持原归属:作用域内唯一优先,否则能造出「同一任务下两个同名时钟」),调用方据此提示
      */
-    suspend fun moveTo(id: Long, taskId: Long?) {
-        val row = dao.byId(id) ?: return
-        if (row.taskId == taskId) return
-        if (dao.byNameInScope(row.name, taskId) != null) return
+    suspend fun moveTo(id: Long, taskId: Long?): Boolean {
+        val row = dao.byId(id) ?: return false
+        if (row.taskId == taskId) return true
+        if (dao.byNameInScope(row.name, taskId) != null) return false
         dao.moveTo(id, taskId)
+        return true
     }
 
     /** v2.2:改名。作用域内唯一校验;重名(或行不存在)返回 false 且不改任何东西 */
@@ -67,15 +73,12 @@ class ProfileRepository(
     }
 
     /**
-     * v2.2:删时钟。有会话段或每日合计引用 → 归档(行保留,历史仍可解析其名);
-     * 无任何引用 → 真删。判定与落库分两步,但 SQL 只读一次引用计数,
-     * 且归档是「保守」方向(最坏情况多留一行归档,不会留下悬空 profileId)。
+     * v2.2:删时钟。有会话段或每日合计引用 → 归档(行保留,历史仍可解析其名);无引用 → 真删。
+     * 「无引用才删」是**一条原子 SQL**([ProfileDao.deleteIfUnreferenced]):先计数再删的话,
+     * 两步之间落下的段落会让这次删除留下悬空 profileId。归档方向保守(最坏多留一行归档)。
      */
     suspend fun removeOrArchive(id: Long): ProfileRemoval {
-        if (dao.referenceCount(id) == 0) {
-            dao.deleteById(id)
-            return ProfileRemoval.Deleted
-        }
+        if (dao.deleteIfUnreferenced(id) > 0) return ProfileRemoval.Deleted
         dao.archiveById(id)
         return ProfileRemoval.Archived
     }

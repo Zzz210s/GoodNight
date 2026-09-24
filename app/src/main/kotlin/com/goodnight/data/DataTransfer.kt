@@ -85,7 +85,7 @@ object DataTransfer {
     /**
      * 导入 JSON 并 upsert 合并;返回 (配置数, 日累计数, 段数, 任务数)。
      * JSON 结构/类型不合法抛 [org.json.JSONException],版本高于本版抛 IllegalArgumentException
-     * (调用方 [com.goodnight.ui.settings.SettingsViewModel.restoreFrom] 用 runCatching 兜住)。
+     * (调用方 [com.goodnight.ui.settings.restoreFrom] 用 runCatching 兜住)。
      */
     suspend fun importJson(db: GoodNightDatabase, json: String): ImportCounts {
         val root = JSONObject(json)

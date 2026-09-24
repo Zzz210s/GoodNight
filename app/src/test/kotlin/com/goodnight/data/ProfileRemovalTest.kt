@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -130,20 +131,64 @@ class ProfileRemovalTest {
         session(p, taskId = a)
         val before = db!!.focusSessionDao().getAll()
 
-        profiles.moveTo(p, null)
+        assertTrue("改归属成功 → true", profiles.moveTo(p, null))
         assertNull("专属 -> 通用", profiles.byId(p)!!.taskId)
-        profiles.moveTo(p, a)
+        assertTrue("通用 -> 专属成功 → true", profiles.moveTo(p, a))
         assertEquals("通用 -> 专属", a, profiles.byId(p)!!.taskId)
+        assertTrue("本来就在目标作用域 → true(无变化也算成功)", profiles.moveTo(p, a))
+        assertFalse("行不存在 → false", profiles.moveTo(999L, null))
         assertEquals("改归属不碰历史", before, db!!.focusSessionDao().getAll())
     }
 
-    /** 改归属不能把「作用域内唯一」破掉:目标作用域已有同名活跃时钟时保持原归属 */
+    /** 改归属不能把「作用域内唯一」破掉:目标作用域已有同名活跃时钟时保持原归属并返回 false */
     @Test fun moveToRefusesNameClashInTargetScope() = runTest {
         val a = tasks.create("A", 1L)!!
         clock("专注", taskId = a)
         val generic = clock("专注")
-        profiles.moveTo(generic, a)
+        assertFalse("目标作用域重名 → false", profiles.moveTo(generic, a))
         assertNull("目标作用域重名 → 保持通用", profiles.byId(generic)!!.taskId)
-        assertEquals(1, db!!.profileDao().getAll().count { it.taskId == a })
+        assertEquals("行一个不多一个不少", 1, db!!.profileDao().getAll().count { it.taskId == a })
+    }
+
+    /**
+     * 原子删除语句本身必须带引用守卫:有会话段/每日合计时 rowsAffected = 0、行仍在。
+     * 实现退回「先计数再删」或去掉 NOT EXISTS 子句时,本用例会红。
+     */
+    @Test fun atomicDeleteStatementRefusesReferencedClock() = runTest {
+        val withSession = clock("有段")
+        session(withSession)
+        val withDaily = clock("有日结")
+        db!!.dailyTotalDao().upsert(
+            DailyTotalEntity(date = "2026-09-24", profileId = withDaily, workMillis = 1, updatedAt = 1)
+        )
+        val free = clock("空闲")
+
+        assertEquals("有会话段:一条语句内就被拒", 0, db!!.profileDao().deleteIfUnreferenced(withSession))
+        assertEquals("有每日合计:同样被拒", 0, db!!.profileDao().deleteIfUnreferenced(withDaily))
+        assertNotNull(profiles.byId(withSession))
+        assertNotNull(profiles.byId(withDaily))
+        assertEquals("无引用:同一条语句完成删除", 1, db!!.profileDao().deleteIfUnreferenced(free))
+        assertNull(profiles.byId(free))
+    }
+
+    /** 通用「专注」+ A 专属「专注」:删 A 后通用层仍唯一 —— 第二条改「专注 (2)」 */
+    @Test fun deleteTaskDedupesFreedClockAgainstGenericName() = runTest {
+        val a = tasks.create("A", 1L)!!
+        val generic = clock("专注")
+        val scoped = clock("专注", taskId = a)
+        session(scoped, taskId = a)
+
+        tasks.deleteTask(a)
+
+        assertEquals("去重后缀从 2 起", "专注 (2)", profiles.byId(scoped)!!.name)
+        assertNull("解绑与改名同一条语句", profiles.byId(scoped)!!.taskId)
+        assertEquals("原有通用时钟名字不动", "专注", profiles.byId(generic)!!.name)
+        assertEquals(
+            "两条都在通用层且不同名",
+            listOf("专注", "专注 (2)"),
+            profiles.availableFor(null).first().map { it.name },
+        )
+        assertEquals("各自都能被作用域查询命中", generic, db!!.profileDao().byNameInScope("专注", null)!!.id)
+        assertEquals(scoped, db!!.profileDao().byNameInScope("专注 (2)", null)!!.id)
     }
 }

@@ -2,6 +2,7 @@ package com.goodnight.data
 
 import androidx.room.withTransaction
 import com.goodnight.data.db.GoodNightDatabase
+import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.TaskDao
 import com.goodnight.data.db.TaskEntity
 import kotlinx.coroutines.flow.Flow
@@ -60,11 +61,27 @@ class TaskRepository(private val db: GoodNightDatabase) {
      * 删除任务与解绑同事务:段保留(时间账保留),只把 taskId 置空;
      * v2.2 起该任务的**专属时钟转为通用**(`profile.taskId = NULL`,行与计时设置都保留),
      * 否则任务行消失后时钟会变成指向已删任务的悬挂引用。其它任务引用不受影响。
+     *
+     * 转通用时**按数字后缀去重**:通用层可能已有同名时钟(如通用「专注」+ A 专属「专注」),
+     * 直接解绑会造出两个同名通用时钟,破坏作用域内唯一,也让 byNameInScope 的 LIMIT 1 失去意义。
      */
     suspend fun deleteTask(id: Long) = db.withTransaction {
         dao.clearTaskRefs(id)
-        profileDao.clearTaskRefs(id)
+        profileDao.getByTask(id).forEach { p ->
+            profileDao.freeToGeneric(p.id, uniqueGenericName(p))
+        }
         dao.deleteById(id)
+    }
+
+    /** 目标(通用)作用域已有同名活跃时钟时,依次试「名字 (2)」「名字 (3)」…直到不冲突 */
+    private suspend fun uniqueGenericName(p: ProfileEntity): String {
+        var candidate = p.name
+        var n = 2
+        while (profileDao.byNameInScope(candidate, null) != null) {
+            candidate = "${p.name} ($n)"
+            n += 1
+        }
+        return candidate
     }
 
     /**

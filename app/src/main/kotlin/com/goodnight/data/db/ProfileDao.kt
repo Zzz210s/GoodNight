@@ -16,7 +16,6 @@ interface ProfileDao {
     @Query("SELECT * FROM profile ORDER BY createdAt, id")
     fun observeAll(): Flow<List<ProfileEntity>>
     @Query("SELECT * FROM profile WHERE id = :id") suspend fun byId(id: Long): ProfileEntity?
-    @Query("SELECT * FROM profile WHERE name = :name LIMIT 1") suspend fun byName(name: String): ProfileEntity?
     @Query("SELECT mode FROM profile WHERE id = :id") suspend fun modeById(id: Long): Int?
     @Query("SELECT COUNT(*) FROM profile") suspend fun count(): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(rows: List<ProfileEntity>)
@@ -49,20 +48,26 @@ interface ProfileDao {
     @Query("UPDATE profile SET taskId = :taskId WHERE id = :id")
     suspend fun moveTo(id: Long, taskId: Long?)
 
-    /** 删除任务时把专属时钟转为通用(行保留:时间账与时钟设置都不丢) */
-    @Query("UPDATE profile SET taskId = NULL WHERE taskId = :taskId")
-    suspend fun clearTaskRefs(taskId: Long)
+    /** 删除任务时把专属时钟转通用(行保留:时间账与时钟设置都不丢);名字由调用方去重后传入 */
+    @Query("SELECT * FROM profile WHERE taskId = :taskId ORDER BY createdAt, id")
+    suspend fun getByTask(taskId: Long): List<ProfileEntity>
 
-    /** 归档(行保留、列表隐藏);返回值不取,调用方先用 [referenceCount] 判定 */
+    /** 一条语句完成「解绑 + 改名」,避免中间态出现两个同名通用时钟 */
+    @Query("UPDATE profile SET taskId = NULL, name = :name WHERE id = :id")
+    suspend fun freeToGeneric(id: Long, name: String)
+
+    /** 归档(行保留、列表隐藏);判定见 [deleteIfUnreferenced] */
     @Query("UPDATE profile SET archived = 1 WHERE id = :id")
     suspend fun archiveById(id: Long)
 
-    @Query("DELETE FROM profile WHERE id = :id") suspend fun deleteById(id: Long)
-
-    /** 引用计数:引用该时钟的会话段 + 每日合计(任一 > 0 则只能归档、不能真删) */
+    /**
+     * 原子的「无引用才删」:同一条语句里检查会话段与每日合计,取 rowsAffected(>0 才是真删)。
+     * 拆成「先计数再删」会在两步之间漏进新段落,留下悬空 profileId。
+     */
     @Query(
-        "SELECT (SELECT COUNT(*) FROM focus_session WHERE profileId = :id) + " +
-            "(SELECT COUNT(*) FROM daily_total WHERE profileId = :id)"
+        "DELETE FROM profile WHERE id = :id " +
+            "AND NOT EXISTS (SELECT 1 FROM focus_session WHERE profileId = :id) " +
+            "AND NOT EXISTS (SELECT 1 FROM daily_total WHERE profileId = :id)"
     )
-    suspend fun referenceCount(id: Long): Int
+    suspend fun deleteIfUnreferenced(id: Long): Int
 }
