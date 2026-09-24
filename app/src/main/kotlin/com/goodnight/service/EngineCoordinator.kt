@@ -145,7 +145,12 @@ class EngineCoordinator(private val graph: AppGraph) {
     suspend fun run(cmd: TimerCommand) = mutex.withLock {
         com.goodnight.diag.DiagLog.add("Eng", "命令 ${cmd.action.substringAfterLast('.')}")
         when (cmd.action) {
-            ACTION_START -> graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
+            ACTION_START -> {
+                graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
+                // v2.2 Task 3:START 自带任务 id 时在同一把锁内立刻绑定(首次绑定 = 定义整段,
+                // 不产生段内切点);分两条命令下发会有顺序竞态,空闲态丢绑定
+                if (cmd.taskId != null) graph.engine.setTask(cmd.taskId)
+            }
             ACTION_PAUSE -> graph.engine.pause()
             ACTION_RESUME -> graph.engine.resume()
             ACTION_STOP -> {

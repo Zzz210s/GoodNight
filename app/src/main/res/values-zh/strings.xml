@@ -159,4 +159,7 @@
     <string name="task_unbound">未绑定任务</string>
     <string name="task_picker_title">选择任务</string>
     <string name="task_picker_unbind">不绑定</string>
+    <!-- task clocks (v2.2): clock chips on a task card -->
+    <string name="task_add_clock">添加时钟</string>
+    <string name="task_clock_legend">淡色边框 = 通用时钟</string>
 </resources>

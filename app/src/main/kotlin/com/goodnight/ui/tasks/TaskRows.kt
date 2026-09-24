@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.goodnight.R
+import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
@@ -46,34 +47,21 @@ internal val TaskRowHeight = 64.dp
 internal val TaskRowSpacing = 12.dp
 private val HHmm = DateTimeFormatter.ofPattern("MM-dd HH:mm")
 
-@Composable
-internal fun SectionLabel(text: String) {
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-internal fun EmptyHint(text: String) {
-    Card(Modifier.fillMaxWidth()) {
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(12.dp),
-        )
-    }
-}
-
 /**
  * 进行中任务行:**长按后拖动**重排(松手按位移换算落点下标交给 [onMove]),点击进改名,
  * 勾选移入已完成,垃圾桶删除。位移不足一行则不动作(原位回弹)。
+ *
+ * v2.2 Task 3:标题下方是该任务的可用时钟 chip 行(点即开始)+「+ 添加时钟」+ 淡色边框图例。
+ * 行高按内容自适应 —— 拖动落点用**实测行高**换算([dragStepPx]),加了 chip 行也不会漂。
  */
 @Composable
 internal fun ActiveTaskRow(
     task: TaskEntity,
     index: Int,
     count: Int,
+    clocks: TaskClocks,
+    onClockClick: (ProfileEntity) -> Unit,
+    onAddClock: () -> Unit,
     onMove: (Int, Int) -> Unit,
     onToggle: () -> Unit,
     onRename: () -> Unit,
@@ -115,7 +103,16 @@ internal fun ActiveTaskRow(
                 )
             },
     ) {
-        TaskRowBody(task.title, checked = false, onToggle = onToggle, onDelete = onDelete)
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            TaskRowBody(task.title, checked = false, onToggle = onToggle, onDelete = onDelete)
+            TaskClockChipsRow(
+                clocks = clocks,
+                onClockClick = onClockClick,
+                onAddClock = onAddClock,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+            )
+            TaskClockLegend(Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+        }
     }
 }
 
@@ -156,10 +153,19 @@ internal fun DoneTaskRow(task: TaskEntity, onToggle: () -> Unit, onDelete: () ->
     }
 }
 
-/** 行内容:拖动把手(视觉提示)+ 勾选 + 标题 + 删除。标题单行省略:100 字标题也不再折行裁字 */
+/**
+ * 行内容:拖动把手(视觉提示)+ 勾选 + 标题 + 删除。标题单行省略:100 字标题也不再折行裁字。
+ *
+ * v2.2 Task 3:高度必须**按内容**([heightIn] 下限)而不是 `fillMaxSize` —— 现在它上面还叠着
+ * chip 行与图例,父容器宽/高受限时(如 `Box(fillMaxSize)` 里)fillMaxSize 会把标题行撑满整卡,
+ * chip 行被挤到卡片最底部。LazyColumn 里父约束无上限,两者曾经“看起来一样”。
+ */
 @Composable
 private fun TaskRowBody(title: String, checked: Boolean, onToggle: () -> Unit, onDelete: () -> Unit) {
-    Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = TaskRowHeight).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         PathIcon(
             IconPaths.MENU, size = 20.dp,
             contentDescription = stringResource(R.string.task_drag),

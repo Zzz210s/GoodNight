@@ -159,4 +159,7 @@
     <string name="task_unbound">No task</string>
     <string name="task_picker_title">Pick a task</string>
     <string name="task_picker_unbind">Unbind</string>
+    <!-- task clocks (v2.2): clock chips on a task card -->
+    <string name="task_add_clock">Add clock</string>
+    <string name="task_clock_legend">Pale outline = shared clock</string>
 </resources>

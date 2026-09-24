@@ -3,13 +3,22 @@ package com.goodnight.ui.tasks
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.goodnight.data.TaskRepository
+import com.goodnight.data.db.ProfileEntity
+import com.goodnight.data.db.ProfileMode
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
+import com.goodnight.service.TimerCommands
+import com.goodnight.timer.EngineStatus
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -28,6 +37,7 @@ data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long)
  * 写操作一律在协程内**从库里读现况**(不依赖被订阅的 StateFlow 当前值)——
  * `WhileSubscribed` 在无人订阅时 `.value` 还是初始空表,据此判完成态会翻反。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
     val active: StateFlow<List<TaskEntity>> = graph.taskRepo.observeActive()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -40,6 +50,57 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
 
     private val _deletePrompt = MutableStateFlow<TaskDeletePrompt?>(null)
     val deletePrompt: StateFlow<TaskDeletePrompt?> = _deletePrompt.asStateFlow()
+
+    // ---- v2.2 Task 3:任务卡片上的时钟 ----
+
+    /**
+     * 每张卡片的可用时钟 = 该任务专属 + 全部通用(排除归档),按进行中任务 id 建索引。
+     * 只覆盖进行中任务:已完成的任务不再有卡片(与首页任务选择器「只列进行中」同口径)。
+     */
+    val clocksByTask: StateFlow<Map<Long, TaskClocks>> = active
+        .flatMapLatest { tasks ->
+            if (tasks.isEmpty()) flowOf(emptyMap())
+            else combine(tasks.map { t -> graph.profileRepo.availableFor(t.id).map { t.id to splitClocks(it) } }) { rows ->
+                rows.toMap()
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    private val _addClockTaskId = MutableStateFlow<Long?>(null)
+
+    /** 「+ 添加时钟」弹窗状态:非空 = 正在给这个任务新建时钟 */
+    val addClockTaskId: StateFlow<Long?> = _addClockTaskId.asStateFlow()
+
+    fun onAddClockRequest(taskId: Long) { _addClockTaskId.value = taskId }
+
+    fun onAddClockDismiss() { _addClockTaskId.value = null }
+
+    /**
+     * 在该任务下新建时钟(作用域内唯一由仓库保证)。**仓库拒绝(同作用域重名,返回 null)时
+     * 不关弹窗** —— 用户看到弹窗还在,可以改个名字再来;关掉的话这次输入就静默丢了。
+     */
+    fun onCreateClock(taskId: Long, name: String, workMinutes: Int, restMinutes: Int, mode: Int) {
+        viewModelScope.launch {
+            val id = graph.profileRepo.create(name, workMinutes, restMinutes, mode, taskId)
+            if (id != null) _addClockTaskId.value = null
+        }
+    }
+
+    /**
+     * 空闲时点 chip 即开始:会话同时记下该卡片的任务与该 chip 的时钟,两者搭在**同一条 START
+     * 命令**上(服务 -> [com.goodnight.service.EngineCoordinator],引擎的唯一驱动者 + 同一把 mutex)。
+     *
+     * 计时进行中点 chip 一律 no-op:静默换时钟会让 45/15 与 25/5 的规则混在同一段里,
+     * 换时钟的确认流程是 Task 4 的范围(设计 §4),本任务不实现。
+     */
+    fun onStartClock(taskId: Long, clock: ProfileEntity) {
+        val snap = graph.engine.snapshot.value
+        if (snap != null && snap.status != EngineStatus.IDLE) return
+        TimerCommands.start(
+            graph.appContext, clock.id, clock.workMinutes * 60_000L, clock.restMinutes * 60_000L,
+            countUp = clock.mode == ProfileMode.COUNTUP, taskId = taskId,
+        )
+    }
 
     /** 与 [TaskRepository.create] 同口径:去首尾空白后空为 BLANK、超长为 TOO_LONG */
     fun inputErrorFor(title: String): TaskInputError? = when {

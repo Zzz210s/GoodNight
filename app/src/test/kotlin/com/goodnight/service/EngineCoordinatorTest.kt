@@ -80,6 +80,22 @@ class EngineCoordinatorTest {
         assertNull("「不绑定」= 清空运行态绑定", g.engine.snapshot.value!!.taskId)
     }
 
+    /**
+     * v2.2 Task 3:START 可自带任务 id —— 任务卡片「点 chip 即开始」= 一条命令在同一把锁内
+     * 「起画 + 绑定任务」。分两条 intent(start 再 set_task)下发会有顺序竞态:set_task 若先到,
+     * 空闲态(无快照)会被 `engine.setTask` 静默吞掉,绑定就丢了。
+     */
+    @Test fun startCommandCanBindTaskAtomically() = runBlocking {
+        val g = graphFor("coord_start_binds_task")
+        g.coordinator.run(
+            TimerCommand(ACTION_START, profileId = 1L, workMillis = 60_000L, restMillis = 30_000L, taskId = 7L),
+        )
+        val s = g.engine.snapshot.value!!
+        assertEquals(EngineStatus.RUNNING, s.status)
+        assertEquals(7L, s.taskId)
+        assertTrue("首次绑定 = 定义整段,不产生段内切点", s.taskCuts.isEmpty())
+    }
+
     /** 到期推进:WORK -> REST;再调一次幂等(不重复推进) */
     @Test fun advanceIfExpiredIsIdempotent() = runBlocking {
         val g = graphFor("coord_advance")
