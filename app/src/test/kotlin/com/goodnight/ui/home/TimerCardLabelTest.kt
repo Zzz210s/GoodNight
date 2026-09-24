@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.goodnight.R
+import com.goodnight.data.db.ProfileEntity
 import com.goodnight.timer.EngineStatus
 import com.goodnight.timer.Phase
 import com.goodnight.timer.RuntimeSnapshot
@@ -20,7 +21,7 @@ import org.robolectric.annotation.Config
  * 三种情形(设计 §5):
  * 1. 有任务有时钟 -> `任务 · 时钟`;
  * 2. 只有时钟(通用时钟 / 未绑任务)-> 只有时钟名;
- * 3. 都没有 -> null,调用方回退**既有相位文案**(空闲/工作中/休息中)。
+ * 3. 都没有 -> null,调用方回退「未绑定任务」文案。
  *
  * 文案规则是纯函数(分隔符由资源 [R.string.timer_chip_pair] 提供,便于中英各写一份)。
  */
@@ -42,8 +43,20 @@ class TimerCardLabelTest {
         assertEquals("写周报", timerCardLabel("写周报", null, pair))
     }
 
-    @Test fun nullWhenBothMissingSoCallerFallsBackToPhaseText() {
-        assertNull("两者都没有:回退相位文案由调用方决定", timerCardLabel(null, null, pair))
+    @Test fun nullWhenBothMissingSoCallerFallsBackToUnboundText() {
+        assertNull("两者都没有:回退文案由调用方决定", timerCardLabel(null, null, pair))
+    }
+
+    /** 接线:clockId -> 时钟名(此前唯一无覆盖的接线,布局用例由 harness 直传 clockName) */
+    @Test fun clockNameResolvesFromProfilesById() {
+        val profiles = listOf(
+            ProfileEntity(1, "专注", 25, 5, 0),
+            ProfileEntity(2, "深度", 50, 10, 0),
+        )
+
+        assertEquals("深度", clockNameFor(profiles, 2))
+        assertNull("解析不到(空库 / 时钟刚被删)由调用方回退", clockNameFor(profiles, 99))
+        assertNull(clockNameFor(emptyList(), 1))
     }
 
     /** 分隔符走资源(中英双份):zh 资源实际值必须与用例里的模板一致 */

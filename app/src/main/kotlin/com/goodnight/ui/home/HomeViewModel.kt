@@ -3,6 +3,7 @@ package com.goodnight.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.goodnight.data.db.ProfileEntity
+import com.goodnight.data.db.ProfileMode
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
 import com.goodnight.service.TimerCommands
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -141,6 +143,24 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
     fun onPickTask(id: Long?) {
         _taskPickerOpen.value = false
         TimerCommands.setTask(graph.appContext, id)
+    }
+
+    /**
+     * 首页大「开始」键:按当前选中的时钟起画(与按钮启用条件同源 —— [HomeUiState.activeProfileId]
+     * 已把「active 不在表里」回退到首个配置,此处照抄同一判定,避免两处口径漂移)。
+     *
+     * 时钟是**任务专属**的就把它的任务一起带上:否则「任务卡片启动 -> 终止 -> 首页开始」会一键产出
+     * 「时钟属于任务 A、账记在未绑定任务」的会话(设计只允许**通用**时钟走未绑定)。通用时钟留空。
+     */
+    suspend fun startSelectedClock() {
+        val profiles = graph.profileRepo.profiles.first()
+        val active = graph.settingsRepo.activeProfileId.first()
+        val id = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: return
+        val p = profiles.first { it.id == id }
+        TimerCommands.start(
+            graph.appContext, p.id, p.workMinutes * 60_000L, p.restMinutes * 60_000L,
+            countUp = p.mode == ProfileMode.COUNTUP, taskId = p.taskId,
+        )
     }
 
     /** @return true 时调用方需发 TimerCommands.restartPhase */

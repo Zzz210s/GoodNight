@@ -36,9 +36,19 @@ internal fun RuntimeSnapshot.toAdvancedSnapshot(
 internal fun RuntimeSnapshot.settleMillis(settleAtElapsed: Long): Long =
     if (phase == Phase.WORK) (accruedWork(settleAtElapsed) - ckptAccum).coerceAtLeast(0) else 0L
 
-/** 结算窗口(工作段专属):起点取快照持久化的 sessionStartWall,缺失则退化为传入的当前墙钟;终点恒为当前墙钟 */
+/**
+ * 结算窗口(工作段专属):起点取快照持久化的 sessionStartWall,缺失则退化为传入的当前墙钟;
+ * 终点取**该次连续工作停止的时刻** —— RUNNING 取当前墙钟;PAUSED 取 [pauseStartWall]
+ * (进行中的暂停此刻只存在 pauseStartWall,尚未并入 [pauseGaps];若终点用当前墙钟,
+ * 暂停那段会被 EventApplier 按窗口落库、整段记成工作)。
+ * 四个结算点(换时钟 reset / 终止 reset / 跳过 skip / 重启相位 restartPhase)共用本函数,
+ * 故修在这里即四处一致。
+ */
 internal fun RuntimeSnapshot.workWindow(wall: Long): Pair<Long?, Long?> =
-    if (phase == Phase.WORK) (sessionStartWall ?: wall) to wall else null to null
+    if (phase == Phase.WORK) {
+        val end = if (status == EngineStatus.PAUSED) (pauseStartWall ?: wall) else wall
+        (sessionStartWall ?: wall) to end
+    } else null to null
 
 /**
  * v2.1 任务绑定的纯迁移:返回新快照(刷新 savedAt、taskId,并追加切点)与应发的段边界事件。

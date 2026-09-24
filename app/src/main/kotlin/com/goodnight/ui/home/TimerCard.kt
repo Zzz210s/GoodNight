@@ -94,9 +94,9 @@ internal fun TimerCard(
             ) {
                 TaskChip(
                     // v2.2 Task 4:横带文案 =「任务 · 时钟」;只有时钟时只显时钟名;
-                    // 两者都没有(空库)回退相位文案(空闲/工作中/休息中)
+                    // 两者都没有(空库)回退「未绑定任务」—— 相位徽标已带 contentDescription,再写相位会被读屏连读两遍
                     label = timerCardLabel(taskTitle, clockName, stringResource(R.string.timer_chip_pair))
-                        ?: stringResource(phaseRes),
+                        ?: stringResource(R.string.task_unbound),
                     enabled = snap != null,
                     onClick = onTaskChipClick,
                     modifier = Modifier.weight(1f, fill = false),

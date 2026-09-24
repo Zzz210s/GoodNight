@@ -85,10 +85,12 @@ class TimerCardLayoutTest : TimerCardLayoutHarness() {
         assertTrue("chip 左沿 ${chip.left} 应贴在行左侧(非居中)", chip.left.value <= row.left.value + row.width.value / 4f)
     }
 
-    /** 都没有(空库):回退既有相位文案(相位徽标只有 contentDescription,不产生同名文本节点) */
-    @Test fun chipFallsBackToPhaseTextWithoutClockAndTask() {
+    /** 都没有(空库):回退「未绑定任务」—— 不再回退相位文案(相位徽标已把相位写进
+     *  contentDescription,chip 再写一遍会被读屏连读两遍) */
+    @Test fun chipFallsBackToUnboundTextWithoutClockAndTask() {
         setCardWithoutClocks()
-        rule.onNodeWithText(ctx.getString(R.string.state_idle), useUnmergedTree = true).assertExists()
+        rule.onNodeWithText(ctx.getString(R.string.task_unbound), useUnmergedTree = true).assertExists()
+        rule.onNodeWithText(ctx.getString(R.string.state_idle), useUnmergedTree = true).assertDoesNotExist()
     }
 
     /** COUNTUP 路径(建议项:旧布局测试只覆盖倒计时):无到期/循环概念 -> 循环徽标不渲染、

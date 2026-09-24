@@ -124,15 +124,9 @@ fun HomeScreen(
         ) {
             TimerCard(ui, displayMillis, taskTitle = currentTask?.title,
                 // v2.2 Task 4:横带时钟名 = 运行快照的时钟(真值);空闲时 = 选中的时钟
-                clockName = ui.profiles.firstOrNull { it.id == ui.clockId }?.name,
-                onTaskChipClick = { vm.onOpenTaskPicker() }, onStart = {
-                ui.profiles.firstOrNull { it.id == ui.activeProfileId }?.let { p ->
-                    TimerCommands.start(
-                        ctx, p.id, p.workMinutes * 60_000L, p.restMinutes * 60_000L,
-                        countUp = p.mode == ProfileMode.COUNTUP,
-                    )
-                }
-            }, onPause = { TimerCommands.pause(ctx) }, onResume = { TimerCommands.resume(ctx) },
+                clockName = clockNameFor(ui.profiles, ui.clockId),
+                onTaskChipClick = { vm.onOpenTaskPicker() }, onStart = { scope.launch { vm.startSelectedClock() } },
+                onPause = { TimerCommands.pause(ctx) }, onResume = { TimerCommands.resume(ctx) },
                 onSkip = { TimerCommands.skip(ctx) }, onStop = { TimerCommands.stop(ctx) },
                 onGoSettings = onManageProfiles)
             // v1.1 #7:今日合计落账变化时滑切(落账频次低,不打扰);关闭动画直切
@@ -175,7 +169,8 @@ fun HomeScreen(
                 onPick = vm::onPickTask,
                 onDismiss = vm::onDismissTaskPicker,
                 clocks = clocks,
-                runningClockId = ui.snap?.profileId,
+                // 空闲时高亮「将要用哪个时钟」,而非整表不打勾(运行中两值相等)
+                runningClockId = ui.clockId,
                 onPickClock = vm::onPickClock,
             )
         }

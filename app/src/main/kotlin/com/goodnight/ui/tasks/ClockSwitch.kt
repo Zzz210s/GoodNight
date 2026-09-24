@@ -12,7 +12,7 @@ data class PendingClockSwitch(val clock: ProfileEntity, val taskId: Long?)
 
 /** 点一个时钟时的三态,判定见 [clockPickAction] */
 internal enum class ClockPickAction {
-    /** 点的就是正在跑的那个时钟:什么都不做 */
+    /** 点的就是正在跑的那一个(时钟 id **与**归属任务都相同):什么都不做 */
     SAME_CLOCK,
 
     /** 已有会话(运行/暂停)-> 先弹确认;**未确认前不发出任何命令** */
@@ -25,10 +25,18 @@ internal enum class ClockPickAction {
 /**
  * 设计 §4:计时中**不允许静默换时钟**(45/15 与 25/5 不能混在同一段里)。
  * 暂停也算「有会话」—— 段还没结算,换时钟同样要先终止它。
+ *
+ * [targetTaskId] = 这次点击**期望新会话绑定的任务**(计时卡上 = 沿用当前绑定;任务卡片上 = 该卡片
+ * 的任务)。同一个时钟**换任务**也算变化:在任务 A 的卡片上点正在任务 B 名下跑的通用时钟,
+ * 时钟 id 相同但归属不同,旧判定会静默 no-op —— 用户看不到任何反馈。现在这种情况走确认流程。
  */
-internal fun clockPickAction(snap: RuntimeSnapshot?, clockId: Long): ClockPickAction = when {
+internal fun clockPickAction(
+    snap: RuntimeSnapshot?,
+    clockId: Long,
+    targetTaskId: Long?,
+): ClockPickAction = when {
     snap == null || snap.status == EngineStatus.IDLE -> ClockPickAction.FREE
-    snap.profileId == clockId -> ClockPickAction.SAME_CLOCK
+    snap.profileId == clockId && snap.taskId == targetTaskId -> ClockPickAction.SAME_CLOCK
     else -> ClockPickAction.ASK_CONFIRM
 }
 

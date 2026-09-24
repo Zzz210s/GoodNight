@@ -49,20 +49,24 @@ internal class ClockSwitchPrompt(
     fun mirror(profileId: Long) {
         // 用图作用域而非 viewModelScope:镜像写入不属于某个界面的生命周期(界面销毁不该丢掉它),
         // 且 DataStore 的 actor 本身就跑在 appScope 上(见 AppGraph),同一作用域内不会互相等锁。
-        graph.appScope.launch { graph.settingsRepo.setActiveProfile(profileId) }
+        // appScope 无异常处理器:DataStore 写失败必须就地吞掉,否则崩进程(引擎侧同类写入都包了)。
+        graph.appScope.launch { runCatching { graph.settingsRepo.setActiveProfile(profileId) } }
     }
 
     /**
      * 单次快照读:空闲直接生效;有会话则记下待确认请求(未确认前零命令)。
+     * 目标任务 = 卡片任务(任务卡片入口) ?: 当前绑定(计时卡入口:沿用绑定),它同时参与
+     * 「点的就是正在跑的那一个吗」的判定 —— 同一个时钟换任务也算变化(见 [clockPickAction])。
      * `engine.ready` 未就绪一律不发命令动作 —— 冷启动 restore() 前快照为空,放行会覆盖尚未恢复的
      * 运行快照(`engine.start` -> `save()`)并丢掉本段未落账时间。
      */
     private fun ask(clock: ProfileEntity, cardTaskId: Long?, onFree: () -> Unit) {
         if (!graph.engine.ready.value) return
         val snap = graph.engine.snapshot.value
-        when (clockPickAction(snap, clock.id)) {
+        val target = cardTaskId ?: snap?.taskId
+        when (clockPickAction(snap, clock.id, target)) {
             ClockPickAction.SAME_CLOCK -> Unit
-            ClockPickAction.ASK_CONFIRM -> _pending.value = PendingClockSwitch(clock, cardTaskId ?: snap?.taskId)
+            ClockPickAction.ASK_CONFIRM -> _pending.value = PendingClockSwitch(clock, target)
             ClockPickAction.FREE -> onFree()
         }
     }
