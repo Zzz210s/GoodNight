@@ -33,10 +33,12 @@ internal const val TASK_CLOCK_ROW_TAG = "task_clock_row"
 
 /**
  * 时钟 chip 的边框(设计 §5 拍板 5):**通用时钟 = 淡色边框**(outlineVariant,低对比),
- * 专属时钟 = 更实的 outline。抽成纯函数 —— Compose 测试取不到边框颜色,布局测试直接断言颜色。
+ * **专属时钟 = 无边框** —— 它属于本卡片,默认态不必再加标记。纯函数便于布局测试直接断言。
  */
-internal fun clockBorder(generic: Boolean, scheme: ColorScheme): BorderStroke =
-    BorderStroke(1.dp, if (generic) scheme.outlineVariant else scheme.outline)
+internal fun genericClockBorder(scheme: ColorScheme): BorderStroke = BorderStroke(1.dp, scheme.outlineVariant)
+
+internal fun clockBorder(generic: Boolean, scheme: ColorScheme): BorderStroke? =
+    if (generic) genericClockBorder(scheme) else null
 
 /**
  * v2.2 Task 3:卡片上的可用时钟 chip 行 —— 点 chip 即开始(任务由调用方按卡片补上);
@@ -77,7 +79,7 @@ internal fun TaskClockChipsRow(
 
 /** 单个时钟 chip:名字单行(行内不限宽,由 chip 行滚动容纳);边框区分专属/通用 */
 @Composable
-private fun ClockChip(clock: ProfileEntity, border: BorderStroke, onClick: () -> Unit) {
+private fun ClockChip(clock: ProfileEntity, border: BorderStroke?, onClick: () -> Unit) {
     AssistChip(
         onClick = onClick,
         label = {
@@ -93,8 +95,8 @@ private fun ClockChip(clock: ProfileEntity, border: BorderStroke, onClick: () ->
 }
 
 /**
- * 卡片底部的图例:说明淡色边框的含义(设计 §5 拍板 5)。跟着每张卡片走(固定视觉词典),
- * 用一个与通用 chip 同款的小色块 + 一句短文案,不占整行宽度也不折行。
+ * 卡片底部的图例:只在卡片**有通用时钟**时才由调用方渲染 —— 无通用时钟时淡色边框不存在,
+ * 图例解释的是一个根本不存在的东西。用一个与通用 chip 同款的小色块 + 一句短文案,不折行。
  */
 @Composable
 internal fun TaskClockLegend(modifier: Modifier = Modifier) {
@@ -103,7 +105,7 @@ internal fun TaskClockLegend(modifier: Modifier = Modifier) {
         Box(
             Modifier
                 .size(width = 18.dp, height = 12.dp)
-                .border(clockBorder(generic = true, scheme = scheme), RoundedCornerShape(6.dp)),
+                .border(genericClockBorder(scheme), RoundedCornerShape(6.dp)),
         )
         Spacer(Modifier.width(6.dp))
         Text(

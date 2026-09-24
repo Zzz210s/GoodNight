@@ -22,7 +22,8 @@ import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
 
 // 自 SettingsScreen 拆出(200 行规则):编辑/新建共用的配置输入对话框。
-// internal 而非 private:SettingsScreen.kt 跨文件调用,app 模块内可见即止
+// internal 而非 private:SettingsScreen.kt 跨文件调用,app 模块内可见即止。[error] 为非空时
+// 在输入项下方提示仓库侧拒绝的原因(与对话框内的重名预校验互为兜底)。
 @Composable
 internal fun ProfileEditDialog(
     initial: ProfileEntity?,
@@ -30,6 +31,7 @@ internal fun ProfileEditDialog(
     title: String,
     onDismiss: () -> Unit,
     onConfirm: (name: String, work: Int, rest: Int, mode: Int) -> Unit,
+    error: String? = null,
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var work by remember { mutableStateOf((initial?.workMinutes ?: 25).toString()) }
@@ -61,6 +63,8 @@ internal fun ProfileEditDialog(
                 }
                 OutlinedTextField(value = work, onValueChange = { work = it }, label = { Text(stringResource(R.string.work_minutes)) })
                 OutlinedTextField(value = rest, onValueChange = { rest = it }, label = { Text(stringResource(R.string.rest_minutes)) })
+                // v2.2 Task 3:仓库侧拒绝(重名预校验的数据源瞬时为空时)也要有可见提示
+                error?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {

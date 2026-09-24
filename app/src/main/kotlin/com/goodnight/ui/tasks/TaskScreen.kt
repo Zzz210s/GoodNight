@@ -58,6 +58,7 @@ fun TaskScreen(onBack: () -> Unit) {
     // v2.2 Task 3:每张卡片的可用时钟(专属 + 通用)与「+ 添加时钟」弹窗状态
     val clocksByTask by vm.clocksByTask.collectAsStateWithLifecycle()
     val addClockTaskId by vm.addClockTaskId.collectAsStateWithLifecycle()
+    val clockError by vm.clockError.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<TaskEntity?>(null) }
 
@@ -144,6 +145,7 @@ fun TaskScreen(onBack: () -> Unit) {
         // 重名预校验只针对该任务的专属时钟(作用域口径:通用时钟是另一层,不挡新建)
         TaskClockDialog(
             scoped = clocksByTask[taskId]?.specific ?: emptyList(),
+            error = clockError,
             onDismiss = vm::onAddClockDismiss,
             onConfirm = { name, work, rest, mode -> vm.onCreateClock(taskId, name, work, rest, mode) },
         )

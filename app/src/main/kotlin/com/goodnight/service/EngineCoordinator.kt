@@ -146,10 +146,14 @@ class EngineCoordinator(private val graph: AppGraph) {
         com.goodnight.diag.DiagLog.add("Eng", "命令 ${cmd.action.substringAfterLast('.')}")
         when (cmd.action) {
             ACTION_START -> {
-                graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
                 // v2.2 Task 3:START 自带任务 id 时在同一把锁内立刻绑定(首次绑定 = 定义整段,
-                // 不产生段内切点);分两条命令下发会有顺序竞态,空闲态丢绑定
-                if (cmd.taskId != null) graph.engine.setTask(cmd.taskId)
+                // 不产生段内切点);分两条命令下发会有顺序竞态,空闲态丢绑定。
+                // 但只在**真的会启动**时才绑定:engine.start 非 IDLE 时是 no-op,若照样 setTask
+                // 就会给正在运行的那一段静默改归属(段内生成 task 切点)—— 点 chip 与首页/通知的
+                // 启动 Intent 竞态到达时,用户看到的运行时钟不是自己点的那个。
+                val wasIdle = graph.engine.snapshot.value?.let { it.status == EngineStatus.IDLE } ?: true
+                graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
+                if (wasIdle && cmd.taskId != null) graph.engine.setTask(cmd.taskId)
             }
             ACTION_PAUSE -> graph.engine.pause()
             ACTION_RESUME -> graph.engine.resume()

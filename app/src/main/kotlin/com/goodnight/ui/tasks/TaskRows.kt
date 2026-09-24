@@ -51,8 +51,9 @@ private val HHmm = DateTimeFormatter.ofPattern("MM-dd HH:mm")
  * 进行中任务行:**长按后拖动**重排(松手按位移换算落点下标交给 [onMove]),点击进改名,
  * 勾选移入已完成,垃圾桶删除。位移不足一行则不动作(原位回弹)。
  *
- * v2.2 Task 3:标题下方是该任务的可用时钟 chip 行(点即开始)+「+ 添加时钟」+ 淡色边框图例。
- * 行高按内容自适应 —— 拖动落点用**实测行高**换算([dragStepPx]),加了 chip 行也不会漂。
+ * v2.2 Task 3:标题下方是该任务的可用时钟 chip 行(点即开始)+「+ 添加时钟」+ 淡色边框图例
+ * (后者只在有通用时钟时出现)。行高按内容自适应 —— 拖动落点用**实测行高**换算([dragStepPx]),
+ * 加了 chip 行也不会漂。
  */
 @Composable
 internal fun ActiveTaskRow(
@@ -111,7 +112,10 @@ internal fun ActiveTaskRow(
                 onAddClock = onAddClock,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
             )
-            TaskClockLegend(Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            // v2.2 Task 3:图例只解释淡色边框 —— 卡片没有通用时钟就不渲染(空卡不再占一行说明不存在的东西)
+            if (clocks.generic.isNotEmpty()) {
+                TaskClockLegend(Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            }
         }
     }
 }

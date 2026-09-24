@@ -21,7 +21,8 @@ import com.goodnight.R
 import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.TaskEntity
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,7 +38,8 @@ import org.robolectric.annotation.GraphicsMode
  * 钉住:
  * 1. 长任务名 + 多时钟时 chip 行仍在标题**下方**(同一 Column,结构上不重叠),且行不折行、不撑宽卡片;
  * 2. 时钟多到超过卡片宽度时是**横向滚动**(内容宽于容器,末个 chip 落在行右沿之外),不是换行/裁掉;
- * 3. 图例在 chip 行之下、卡片之内;通用时钟的边框是淡色(outlineVariant),与专属时钟不同。
+ * 3. 图例在 chip 行之下、卡片之内**且只在卡片有通用时钟时出现**;
+ * 4. 边框区分:通用 = 淡色(outlineVariant),专属 = 无边框。
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE) // 真实字体度量(legacy 模式每字符只算 1px)
@@ -128,25 +130,31 @@ class TaskClockLayoutTest {
         assertTrue("图例右沿 ${legend.right} 不得越出屏宽", legend.right <= root.right + 0.5.dp)
     }
 
-    /** 无时钟的卡片也保留 chip 行(只有「+ 添加时钟」)与图例,行不折、不溢出 */
-    @Test fun emptyClockCardStillFitsTheAddChip() {
+    /**
+     * 无时钟的空卡片:只有「+ 添加时钟」一行,**不渲染图例** ——
+     * 没有通用时钟,淡色边框不存在,图例不该占一行解释一个不存在的东西。
+     */
+    @Test fun cardWithoutGenericClocksHasNoLegend() {
         setRow(TaskClocks(emptyList(), emptyList()))
         val row = rowBounds()
         val root = rule.onRoot().getUnclippedBoundsInRoot()
         rule.onNodeWithText(ctx.getString(R.string.task_add_clock), useUnmergedTree = true).assertExists()
-        rule.onNodeWithText(ctx.getString(R.string.task_clock_legend), useUnmergedTree = true).assertExists()
+        rule.onNodeWithText(ctx.getString(R.string.task_clock_legend), useUnmergedTree = true).assertDoesNotExist()
         assertTrue("空卡片也只有一行 chip:高 ${row.height}", row.height.value in 20f..60f)
         assertTrue("chip 行右沿 ${row.right} 不得越出屏宽", row.right <= root.right + 0.5.dp)
     }
 
-    /** 通用 = 淡色描边(outlineVariant),专属 = 更实的 outline:图例的说法必须与代码一致 */
-    @Test fun genericClocksUseThePaleOutline() {
+    /** 只有专属时钟的卡片同样没有图例:图例解释的淡色边框仍不存在 */
+    @Test fun specificOnlyCardHasNoLegend() {
+        setRow(TaskClocks(specific = listOf(clock(1, "A 专属", 7)), generic = emptyList()))
+        rule.onNodeWithText(ctx.getString(R.string.task_clock_legend), useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /** 通用 = 淡色描边(outlineVariant),专属 = **无边框**:图例的说法必须与代码一致 */
+    @Test fun genericClocksUseThePaleOutlineAndSpecificOnesHaveNone() {
         val scheme = lightColorScheme()
-        assertEquals(scheme.outlineVariant, (clockBorder(generic = true, scheme = scheme).brush as SolidColor).value)
-        assertNotEquals(
-            "专属与通用必须能看出来不同",
-            (clockBorder(generic = false, scheme = scheme).brush as SolidColor).value,
-            (clockBorder(generic = true, scheme = scheme).brush as SolidColor).value,
-        )
+        assertEquals(scheme.outlineVariant, (genericClockBorder(scheme).brush as SolidColor).value)
+        assertNull("专属 chip 不加边框(默认态),与通用的淡色描边形成对比", clockBorder(generic = false, scheme = scheme))
+        assertNotNull(clockBorder(generic = true, scheme = scheme))
     }
 }

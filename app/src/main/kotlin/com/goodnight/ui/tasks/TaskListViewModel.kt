@@ -71,17 +71,21 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
     /** 「+ 添加时钟」弹窗状态:非空 = 正在给这个任务新建时钟 */
     val addClockTaskId: StateFlow<Long?> = _addClockTaskId.asStateFlow()
 
-    fun onAddClockRequest(taskId: Long) { _addClockTaskId.value = taskId }
+    private val _clockError = MutableStateFlow<TaskClockError?>(null)
 
-    fun onAddClockDismiss() { _addClockTaskId.value = null }
+    /** 新建被仓库拒绝的原因(重名预校验的数据源瞬时为空时会走到这里,必须给用户提示) */
+    val clockError: StateFlow<TaskClockError?> = _clockError.asStateFlow()
 
-    /**
-     * 在该任务下新建时钟(作用域内唯一由仓库保证)。**仓库拒绝(同作用域重名,返回 null)时
-     * 不关弹窗** —— 用户看到弹窗还在,可以改个名字再来;关掉的话这次输入就静默丢了。
-     */
+    fun onAddClockRequest(taskId: Long) { _addClockTaskId.value = taskId; _clockError.value = null }
+
+    fun onAddClockDismiss() { _addClockTaskId.value = null; _clockError.value = null }
+
+    /** 在该任务下新建时钟(作用域内唯一由仓库保证)。仓库拒绝时不关弹窗**并给出原因** ——
+     * 关掉的话这次输入就静默丢了。 */
     fun onCreateClock(taskId: Long, name: String, workMinutes: Int, restMinutes: Int, mode: Int) {
         viewModelScope.launch {
             val id = graph.profileRepo.create(name, workMinutes, restMinutes, mode, taskId)
+            _clockError.value = if (id == null) TaskClockError.NAME_TAKEN else null
             if (id != null) _addClockTaskId.value = null
         }
     }
@@ -89,11 +93,11 @@ class TaskListViewModel(private val graph: AppGraph) : ViewModel() {
     /**
      * 空闲时点 chip 即开始:会话同时记下该卡片的任务与该 chip 的时钟,两者搭在**同一条 START
      * 命令**上(服务 -> [com.goodnight.service.EngineCoordinator],引擎的唯一驱动者 + 同一把 mutex)。
-     *
-     * 计时进行中点 chip 一律 no-op:静默换时钟会让 45/15 与 25/5 的规则混在同一段里,
-     * 换时钟的确认流程是 Task 4 的范围(设计 §4),本任务不实现。
+     * 计时进行中一律 no-op(换时钟的确认流程是 Task 4);`engine.ready` 未就绪也 no-op —— 冷启动
+     * restore() 前快照为空,放行会覆盖尚未恢复的运行快照(engine.start -> save())并丢掉本段未落账时间。
      */
     fun onStartClock(taskId: Long, clock: ProfileEntity) {
+        if (!graph.engine.ready.value) return
         val snap = graph.engine.snapshot.value
         if (snap != null && snap.status != EngineStatus.IDLE) return
         TimerCommands.start(

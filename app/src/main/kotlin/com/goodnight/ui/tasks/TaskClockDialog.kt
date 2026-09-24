@@ -19,6 +19,7 @@ internal fun TaskClockDialog(
     scoped: List<ProfileEntity>,
     onDismiss: () -> Unit,
     onConfirm: (name: String, work: Int, rest: Int, mode: Int) -> Unit,
+    error: TaskClockError? = null,
 ) {
     ProfileEditDialog(
         initial = null,
@@ -26,5 +27,8 @@ internal fun TaskClockDialog(
         title = stringResource(R.string.new_clock),
         onDismiss = onDismiss,
         onConfirm = onConfirm,
+        // 预校验(dialog 侧)与真正的唯一校验(仓库内)可能看到不同的数据源瞬态:
+        // 仓库拒绝时必须把原因说出来,不能只留个不动的弹窗
+        error = error?.let { stringResource(R.string.task_clock_name_taken) },
     )
 }

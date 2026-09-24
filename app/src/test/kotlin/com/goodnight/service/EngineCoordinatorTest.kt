@@ -96,6 +96,27 @@ class EngineCoordinatorTest {
         assertTrue("首次绑定 = 定义整段,不产生段内切点", s.taskCuts.isEmpty())
     }
 
+    /**
+     * v2.2 Task 3 修复:运行中收到「自带 taskId 的 START」时,`engine.start` 是 no-op,
+     * 但**不得跟着 setTask** —— 否则会给正在运行的那一段静默改归属(段内生成 task 切点)。
+     * 可达场景:首页/通知的启动 Intent 与任务页点 chip 竞态到达,chip 那条后到。
+     */
+    @Test fun startWithTaskDoesNotRebindWhileTimerRuns() = runBlocking {
+        val g = graphFor("coord_start_ignored_when_running")
+        g.coordinator.run(TimerCommand(ACTION_START, profileId = 1L, workMillis = 60_000L, restMillis = 30_000L))
+        assertEquals(EngineStatus.RUNNING, g.engine.snapshot.value!!.status)
+
+        // 第二条 START 自带 taskId + 另一个时钟:不得启动、不得换归属
+        g.coordinator.run(
+            TimerCommand(ACTION_START, profileId = 2L, workMillis = 45 * 60_000L, restMillis = 15 * 60_000L, taskId = 7L),
+        )
+        val s = g.engine.snapshot.value!!
+        assertNull("运行中不得静默绑定任务", s.taskId)
+        assertEquals("也不得换时钟", 1L, s.profileId)
+        assertEquals(60_000L, s.workMillis)
+        assertTrue("不产生段内切点", s.taskCuts.isEmpty())
+    }
+
     /** 到期推进:WORK -> REST;再调一次幂等(不重复推进) */
     @Test fun advanceIfExpiredIsIdempotent() = runBlocking {
         val g = graphFor("coord_advance")

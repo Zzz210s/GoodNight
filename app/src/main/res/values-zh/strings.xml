@@ -161,5 +161,6 @@
     <string name="task_picker_unbind">不绑定</string>
     <!-- task clocks (v2.2): clock chips on a task card -->
     <string name="task_add_clock">添加时钟</string>
-    <string name="task_clock_legend">淡色边框 = 通用时钟</string>
+    <string name="task_clock_legend">无边框 = 专属时钟,淡色 = 通用时钟</string>
+    <string name="task_clock_name_taken">该任务下已有同名时钟,换个名字</string>
 </resources>
