@@ -159,4 +159,21 @@ class ProfileManageTest {
         assertEquals("分组只含活跃时钟", listOf("在用"), v.ui.value.sections.flatMap { it.clocks }.map { it.name })
         job.cancel()
     }
+
+    /**
+     * Minor(复审):已完成段的兜底键与任务页同口径 —— 同毫秒完成的两条任务在管理页的分组顺序
+     * 必须与任务页一致(`doneAt DESC, id DESC`)。旧实现用 id ASC,两边顺序会相反。
+     */
+    @Test fun doneTasksKeepTaskPageOrder() = runTest {
+        val a = task("先建的")
+        val b = task("后建的")
+        g.taskRepo.setDone(a, true, now = 5_000L)
+        g.taskRepo.setDone(b, true, now = 5_000L)
+
+        val donePage = g.taskRepo.observeDone().first().map { it.id }
+        val manage = g.taskRepo.observeAllOrdered().first().filter { it.done }.map { it.id }
+
+        assertEquals(listOf(b, a), donePage)
+        assertEquals("管理页分组顺序 = 任务页顺序", donePage, manage)
+    }
 }

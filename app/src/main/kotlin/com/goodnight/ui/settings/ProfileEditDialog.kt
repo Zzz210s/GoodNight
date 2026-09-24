@@ -46,6 +46,8 @@ internal fun ProfileEditDialog(
     scopes: List<ClockScope>? = null,
     scopeTaskId: Long? = null,
     onScopeChange: (Long?) -> Unit = {},
+    /** 名字/时长被改动时回调(调用方借此清掉上一次仓库拒绝的红色提示 —— 改完就该重新判定) */
+    onNameChange: () -> Unit = {},
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var work by remember { mutableStateOf((initial?.workMinutes ?: 25).toString()) }
@@ -63,7 +65,7 @@ internal fun ProfileEditDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.name_label)) })
+                OutlinedTextField(value = name, onValueChange = { name = it; onNameChange() }, label = { Text(stringResource(R.string.name_label)) })
                 Text(stringResource(R.string.mode_label), style = MaterialTheme.typography.labelLarge)
                 SingleChoiceSegmentedButtonRow {
                     modeOptions.forEachIndexed { index, (value, labelRes) ->

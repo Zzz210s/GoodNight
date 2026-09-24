@@ -81,10 +81,13 @@ interface TaskDao {
      * v2.2 Task 5:管理页「任务专属」分组与归属选择用的**全任务有序表** —— 未完成在前
      * (按手工顺序),已完成随后(最近完成在前)。顺序必须与任务页两段一致,故不复用
      * [observeAll](无序):分组顺序 = 用户在任务页看到的顺序。
+     *
+     * 已完成段的兜底键与 [observeDone] 同口径:`doneAt DESC, id DESC`(同毫秒完成的两条任务
+     * 若用 id ASC 排,管理页分组顺序会与任务页相反 —— 排序键必须逐列一致)。
      */
     @Query(
         "SELECT * FROM task ORDER BY done ASC, " +
-            "CASE WHEN done = 0 THEN sortOrder ELSE 0 END ASC, doneAt DESC, id ASC"
+            "CASE WHEN done = 0 THEN sortOrder ELSE 0 END ASC, doneAt DESC, id DESC"
     )
     fun observeAllOrdered(): Flow<List<TaskEntity>>
 

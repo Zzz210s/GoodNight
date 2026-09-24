@@ -64,7 +64,6 @@ internal fun ProfileDialogHost(
     vm: SettingsViewModel,
     ui: SettingsUiState,
     state: ProfileDialogState,
-    runningActiveId: Long?,
     onDeleteModeExit: () -> Unit,
 ) {
     val ctx: Context = LocalContext.current
@@ -82,16 +81,14 @@ internal fun ProfileDialogHost(
             scopes = scopes,
             scopeTaskId = state.scope,
             onScopeChange = { state.scope = it; state.nameTaken = false },
+            onNameChange = { state.nameTaken = false },
             error = if (state.nameTaken) stringResource(R.string.clock_name_taken) else null,
             onDismiss = { state.closeEditing() },
             onConfirm = { name, w, r, mode ->
                 scope.launch {
-                    // 先改归属再改名:[SettingsViewModel.moveToProfile] 与 renameProfile 都要过
-                    // 「作用域内唯一」;先搬迁能让改名按**新**作用域判定,否则「搬到 B 并换成 B 里
-                    // 空闲的名字」会被旧作用域 A 的同名行误判(两步都有失败分支,失败即整体不动)
-                    var ok = state.scope == p.taskId || vm.moveToProfile(p.id, state.scope)
-                    if (ok && name != p.name) ok = vm.renameProfile(p.id, name)
-                    if (!ok) {
+                    // 改归属 + 改名两步都要过「作用域内唯一」:失败已在 VM 内回滚(搬迁不残留),
+                    // 所以这里只负责提示 —— 不再出现「已换归属、名字未改」的半成品
+                    if (!vm.commitScopeAndName(p, state.scope, name)) {
                         state.nameTaken = true
                         return@launch
                     }
@@ -113,6 +110,7 @@ internal fun ProfileDialogHost(
             scopes = scopes,
             scopeTaskId = state.scope,
             onScopeChange = { state.scope = it; state.nameTaken = false },
+            onNameChange = { state.nameTaken = false },
             error = if (state.nameTaken) stringResource(R.string.clock_name_taken) else null,
             onDismiss = { state.closeEditing() },
             onConfirm = { name, w, r, mode ->
@@ -128,34 +126,35 @@ internal fun ProfileDialogHost(
         )
     }
     state.deletePlan?.let { plan ->
+        // 确认框的计数按**真正会执行**的 [DeletePlan.count],而按钮写的是选中数:
+        // 计划里被「至少保留 1 个活跃时钟」扣掉的那条必须解释清楚,否则两个数字对不上像漏删
+        val body = when {
+            // 计划为空 = 选中的就是最后一个活跃时钟(有历史也不归档:归档同样让它从列表消失)
+            plan.count == 0 -> stringResource(R.string.delete_keep_one)
+            plan.anyArchive -> stringResource(
+                R.string.delete_confirm_archive_body,
+                plan.count, plan.archiveCount, plan.archiveMinutes,
+                plan.count - plan.archiveCount,
+            )
+            else -> stringResource(R.string.delete_confirm_body, plan.count)
+        }
+        // 被「至少保留 1 个活跃时钟」扣掉的那条:按钮写选中数、确认框按 plan.count,差额要解释
+        // (计划为空时正文已说明,不再重复)
+        val note = plan.keptIds.size.takeIf { plan.count > 0 && it > 0 }
         AlertDialog(
             onDismissRequest = { state.deletePlan = null },
             title = { Text(stringResource(R.string.delete_confirm_title)) },
             text = {
-                Text(
-                    when {
-                        // 计划为空 = 每条都被「至少保留 1 个时钟」挡下(有历史的会走归档,不受该规则约束)
-                        plan.count == 0 -> stringResource(R.string.delete_keep_one)
-                        plan.anyArchive -> stringResource(
-                            R.string.delete_confirm_archive_body,
-                            plan.count, plan.archiveCount, plan.archiveMinutes,
-                            plan.count - plan.archiveCount,
-                        )
-                        else -> stringResource(R.string.delete_confirm_body, plan.count)
-                    },
-                )
+                Text(if (note == null) body else body + "\n" + stringResource(R.string.delete_keep_one_note, note))
             },
             confirmButton = {
                 TextButton(onClick = {
                     val targets = plan.clocks
                     state.deletePlan = null
                     scope.launch {
-                        // 单个失败不阻断其余删除(仓库层已保证失败不写库)
-                        targets.forEach { p ->
-                            runCatching {
-                                if (vm.deleteProfile(p) && runningActiveId == p.id) TimerCommands.stop(ctx)
-                            }
-                        }
+                        // 单个失败不阻断其余删除(仓库层已保证失败不写库);批量执行在 VM 内,
+                        // 返回 true = 被删的正是引擎当前认的时钟(含暂停态)→ 补一条 stop
+                        if (vm.deleteProfiles(targets)) TimerCommands.stop(ctx)
                         onDeleteModeExit()
                     }
                 }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }

@@ -18,6 +18,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -87,10 +88,10 @@ class ProfileDeletePlanTest {
     }
 
     /**
-     * 指针 1:「至少保留 1 个」只约束真删 —— 唯一一个有时钟记录的时钟仍能从列表隐藏(归档行还在,
-     * 历史照样解析它的名字),否则「只有一个时钟且有记录」的用户永远删不掉它。
+     * 复审修复:归档同样受「至少保留 1 个**活跃**时钟」约束 —— 归档是列表隐藏,把唯一的活跃
+     * 时钟归档也会让活跃列表清零(首页开始键失效),所以计划为空、什么都不执行。
      */
-    @Test fun lastClockWithHistoryStillArchives() = runTest {
+    @Test fun lastActiveClockIsNeitherArchivedNorDeleted() = runTest {
         val only = clock("唯一")
         session(only.id, millis = 25 * 60_000L)
 
@@ -101,10 +102,35 @@ class ProfileDeletePlanTest {
             dailyTotals = emptyMap(),
         )
 
-        assertEquals(1, plan.count)
-        assertEquals(1, plan.archiveCount)
-        assertEquals(25L, plan.archiveMinutes)
-        assertTrue(plan.anyArchive)
+        assertEquals("选中的就是最后一个活跃时钟:计划为空", 0, plan.count)
+        assertEquals(setOf(only.id), plan.keptIds)
+
+        assertFalse("唯一活跃时钟不归档", vm().deleteProfile(only))
+        assertFalse("行仍在且未归档", g.profileRepo.byId(only.id)!!.archived)
+        assertEquals("账一行不动", 1, g.db.focusSessionDao().getAll().size)
+    }
+
+    /**
+     * 复审修复:归档也计入「还剩几个活跃时钟」—— 两个活跃时钟全选、其中一个有历史时,
+     * 归档 + 真删会把活跃列表清零(首页开始键失效)。计划必须留下最后一个(它在 keptIds 里,
+     * 确认框据此解释按钮计数与执行数的差额)。
+     */
+    @Test fun planDeletionKeepsOneActiveClockWhenOthersWouldOnlyArchive() = runTest {
+        val clean = clock("无历史")
+        val withHistory = clock("有历史")
+
+        val plan = planDeletion(
+            listOf(clean, withHistory),
+            activeCount = 2,
+            sessionMillis = mapOf(withHistory.id to 25 * 60_000L),
+            dailyTotals = emptyMap(),
+        )
+
+        assertEquals("只执行一个:另一个必须留在活跃列表", 1, plan.count)
+        assertEquals("留下的那个不归档", 0, plan.archiveCount)
+        assertEquals(0L, plan.archiveMinutes)
+        assertEquals(listOf(clean.id), plan.clocks.map { it.id })
+        assertEquals(setOf(withHistory.id), plan.keptIds)
     }
 
     /** 无历史且全选:留最后一个活跃时钟(与 [SettingsViewModel.deleteProfile] 的门控同口径) */
@@ -123,6 +149,7 @@ class ProfileDeletePlanTest {
     /** 指针 3:有历史的时钟删除走归档 —— 行保留、历史账一行不删、不再调清账路径 */
     @Test fun deleteProfileArchivesHistoryAndKeepsRecords() = runTest {
         val p = clock("有历史")
+        clock("另一个") // 活跃时钟 > 1,归档才被允许(复审修复:最后一个活跃时钟不归档)
         session(p.id, millis = 30 * 60_000L)
         g.totalsRepo.addWork("2026-09-24", p.id, 30 * 60_000L)
 
@@ -138,14 +165,19 @@ class ProfileDeletePlanTest {
         assertTrue("归档后从管理页活跃流消失", g.profileRepo.observeAllActive().first().none { it.id == p.id })
     }
 
-    /** 指针 1:归档行不算「至少保留 1 个」—— 界面上看不见的行不能替活跃时钟挡删除 */
+    /**
+     * 指针 1 + 复审修复:归档行不算「至少保留 1 个」—— 界面上看不见的行不能替活跃时钟挡删除。
+     * 活跃时钟有 2 个时,归档行既不占名额也不被这次删除影响。
+     */
     @Test fun archivedClockDoesNotSatisfyKeepOneRule() = runTest {
-        val live = clock("在用")
         val dead = clock("旧")
         archive(dead)
+        val live = clock("在用")
+        val other = clock("另一个")
 
-        assertFalse("唯一活跃时钟不可删(归档行不算数)", vm().deleteProfile(live))
-        assertNotNull("活跃时钟未被删", g.profileRepo.byId(live.id))
-        assertFalse(g.profileRepo.byId(live.id)!!.archived)
+        assertFalse("无历史 → 真删(归档行不参与「留一个」判定)", vm().deleteProfile(live))
+        assertNull("活跃时钟已删", g.profileRepo.byId(live.id))
+        assertNotNull("留下的活跃时钟还在", g.profileRepo.byId(other.id))
+        assertTrue("归档行未被动", g.profileRepo.byId(dead.id)!!.archived)
     }
 }

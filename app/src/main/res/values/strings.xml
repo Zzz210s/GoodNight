@@ -44,7 +44,8 @@
     <string name="clock_scope_generic">Generic</string>
     <string name="clock_name_taken">A clock with this name already exists here. Pick another name.</string>
     <string name="delete_confirm_archive_body">Of the %1$d selected clocks, %2$d have records: they will be archived — their %3$d recorded minutes stay and the clock is hidden from the list. The other %4$d will be deleted permanently.</string>
-    <string name="delete_keep_one">At least one clock must remain: the last clock without records cannot be deleted.</string>
+    <string name="delete_keep_one">At least one clock must remain: the last clock cannot be deleted or archived.</string>
+    <string name="delete_keep_one_note">%1$d of them stays (at least one active clock must remain).</string>
     <string name="name_label">Name</string>
     <string name="work_minutes">Work minutes (1-180)</string>
     <string name="rest_minutes">Rest minutes (1-60)</string>
