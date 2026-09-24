@@ -10,11 +10,14 @@ import com.goodnight.data.ProfileRemoval
 import com.goodnight.data.db.FocusSessionEntity
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
+import com.goodnight.ui.settings.SettingsViewModel
+import com.goodnight.ui.settings.deleteProfiles
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -104,5 +107,28 @@ class TimerNotifIdleTest {
 
         val placeholder = ctx.getString(R.string.unselected_placeholder)
         assertEquals("一个活跃时钟都没有 → 占位文案(启动按钮 GONE)", placeholder, awaitTitle(placeholder))
+    }
+
+    /**
+     * 复审修复 W4:归档「当前选中」的时钟后必须重投空闲通知。
+     *
+     * showIdle 原先只在 MainActivity.onCreate / TimerService 收尾时调;管理页把选中时钟归档后
+     * 没人重投,通知栏仍显示已下架时钟(连「启动」按钮一起,按下去就是 ACTION_START + 归档 id)。
+     * 现在删除/归档走 [SettingsViewModel.deleteProfiles],引擎空闲时它自己补一次 showIdle。
+     */
+    @Test fun archivingSelectedClockRefreshesIdleNotification() = runBlocking {
+        val live = clock("在用")
+        val other = clock("另一个")
+        g.db.focusSessionDao().insertAll(
+            listOf(FocusSessionEntity(profileId = live.id, startAt = 0, endAt = 25 * 60_000L))
+        )
+        g.settingsRepo.setActiveProfile(live.id)
+        TimerNotifIdle.showIdle(ctx)
+        assertEquals("先在通知栏挂上选中的时钟", live.name, awaitTitle(live.name))
+
+        SettingsViewModel(g).deleteProfiles(listOf(live)) // 有历史 → 归档(引擎空闲)
+
+        assertTrue("行保留并归档", g.profileRepo.byId(live.id)!!.archived)
+        assertEquals("归档后必须重投空闲通知:回退到活跃时钟", other.name, awaitTitle(other.name))
     }
 }

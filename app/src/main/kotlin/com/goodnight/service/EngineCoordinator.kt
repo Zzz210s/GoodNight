@@ -35,7 +35,7 @@ data class TimerCommand(
  *
  * 服务只保留前台化/ticker/生命周期;所有引擎驱动经同一把 [mutex] 串行。
  */
-class EngineCoordinator(private val graph: AppGraph) {
+class EngineCoordinator(internal val graph: AppGraph) {
     private val scope = graph.appScope
     private val context = graph.appContext
     val notifier = ServiceNotifier(context, graph, scope)

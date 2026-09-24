@@ -3,6 +3,7 @@ package com.goodnight.ui.settings
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,11 +24,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * v2.2 Task 5 复审修复:编辑提交的「先搬迁再改名」必须**整体成功或整体不动**。
+ * v2.2 Task 5 复审修复 W2:编辑提交的「改归属 + 改名」必须**整体成功或整体不动**。
  *
- * 搬迁已落库后改名被拒(目标作用域已有同名)时,旧实现只置 nameTaken 就返回 —— 用户随手取消
- * 就留下「已换归属、名字未改」的半成品(报告 4.2 声称「任一步失败即整体不动」,与实现不符)。
- * 现在两步收进 [SettingsViewModel.commitScopeAndName],改名失败把归属搬回原值。
+ * 旧实现分两步(先搬迁、改名被拒再把归属搬回),回滚本身也可能被拒(原作用域已有同名活跃
+ * 时钟,如历史数据/导入遗留的重名行)—— 那会留下「已换归属、名字未改」的第三种状态。现在由
+ * 仓库层按**最终状态**一次写入:[ProfileRepository.moveAndRename] 先预判目标作用域冲突,
+ * 冲突就一行不动,没有回滚可达。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "zh", application = Application::class)
@@ -54,8 +56,8 @@ class ProfileScopeCommitTest {
     private suspend fun clock(name: String, taskId: Long? = null) =
         g.profileRepo.byId(g.profileRepo.create(name, 25, 5, ProfileMode.COUNTDOWN, taskId)!!)!!
 
-    /** 搬迁成功 + 改名撞名 → 归属必须搬回原值,名字保持原样 */
-    @Test fun renameConflictRollsScopeBack() = runTest {
+    /** 目标作用域已有最终名字 → 整步被拒,归属与原名字都不动(没有中间态) */
+    @Test fun renameConflictLeavesScopeUnchanged() = runTest {
         val a = task("写周报")
         val b = task("读论文")
         val p = clock("专注", a)
@@ -63,7 +65,28 @@ class ProfileScopeCommitTest {
 
         assertFalse("B 里已有「番茄」:整步拒绝", vm().commitScopeAndName(p, b, "番茄"))
 
-        assertEquals("归属必须搬回原值", a, g.profileRepo.byId(p.id)!!.taskId)
+        assertEquals("归属没被换走", a, g.profileRepo.byId(p.id)!!.taskId)
+        assertEquals("名字也没改", "专注", g.profileRepo.byId(p.id)!!.name)
+    }
+
+    /**
+     * W2 的「回滚失败路径」:原作用域已有同名活跃行(历史数据/导入遗留的重名)。
+     * 旧实现先搬迁成功、改名被拒后把归属搬回 —— 但搬回这一步也会被同名行拒,于是留在目标
+     * 作用域且名字未改。预判实现下这条路径不可达:整步一行不动。
+     */
+    @Test fun conflictWithDamagedOriginalScopeLeavesEverythingUntouched() = runTest {
+        val a = task("写周报")
+        val b = task("读论文")
+        val p = clock("专注", a)
+        clock("番茄", b)
+        // 绕过仓库的作用域唯一校验造一条重名行:让「搬回原作用域」这一步也会被拒
+        g.db.profileDao().insert(
+            ProfileEntity(name = "专注", workMinutes = 25, restMinutes = 5, createdAt = 0, taskId = a),
+        )
+
+        assertFalse("目标作用域「番茄」已被占用:整步拒绝", vm().commitScopeAndName(p, b, "番茄"))
+
+        assertEquals("归属没有被换走(旧实现的回滚会失败在这里)", a, g.profileRepo.byId(p.id)!!.taskId)
         assertEquals("名字也没改", "专注", g.profileRepo.byId(p.id)!!.name)
     }
 

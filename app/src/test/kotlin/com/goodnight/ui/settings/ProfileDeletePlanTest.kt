@@ -127,6 +127,7 @@ class ProfileDeletePlanTest {
         )
 
         assertEquals("只执行一个:另一个必须留在活跃列表", 1, plan.count)
+        assertEquals("勾选数是 2(按钮计数口径),正文首句要能对上", 2, plan.selectedCount)
         assertEquals("留下的那个不归档", 0, plan.archiveCount)
         assertEquals(0L, plan.archiveMinutes)
         assertEquals(listOf(clean.id), plan.clocks.map { it.id })

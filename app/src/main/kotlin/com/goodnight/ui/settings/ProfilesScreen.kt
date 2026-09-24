@@ -54,8 +54,8 @@ fun ProfilesScreen(onBack: () -> Unit) {
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     /**
      * 列表门控 = **运行中**的时钟不可点(编辑/勾选都不行);暂停中仍可编辑(见 EnginePolicy)。
-     * 删除后要不要补 stop 不在这里判 —— 那是 [SettingsViewModel.deleteProfiles] 的职责
-     * (RUNNING 与 PAUSED 都算,见 [shouldStopAfterDelete])。
+     * 删除前的停机结算不在这里判 —— 那是 [SettingsViewModel.deleteProfiles] 的职责
+     * (暂停中若删的正是被引擎认着的那个,先停机结算再归档/删除,见 [needsSettleBeforeDelete])。
      */
     val runningActiveId = if (ui.snap?.status == EngineStatus.RUNNING) ui.snap?.profileId else null
     BackHandler(enabled = deleteMode) { deleteMode = false; selectedIds = emptySet() }

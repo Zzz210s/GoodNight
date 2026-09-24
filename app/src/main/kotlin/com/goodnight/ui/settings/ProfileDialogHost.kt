@@ -138,23 +138,25 @@ internal fun ProfileDialogHost(
             )
             else -> stringResource(R.string.delete_confirm_body, plan.count)
         }
-        // 被「至少保留 1 个活跃时钟」扣掉的那条:按钮写选中数、确认框按 plan.count,差额要解释
-        // (计划为空时正文已说明,不再重复)
+        // 被「至少保留 1 个活跃时钟」扣掉的那条:按钮写选中数、确认框首句也写选中数,差额用一句
+        // 「已选 N 个,其中 M 个会保留」解释清楚(计划为空时正文本身就是 delete_keep_one,不重复追加)
         val note = plan.keptIds.size.takeIf { plan.count > 0 && it > 0 }
         AlertDialog(
             onDismissRequest = { state.deletePlan = null },
             title = { Text(stringResource(R.string.delete_confirm_title)) },
             text = {
-                Text(if (note == null) body else body + "\n" + stringResource(R.string.delete_keep_one_note, note))
+                Text(
+                    if (note == null) body
+                    else body + "\n" + stringResource(R.string.delete_keep_one_note, plan.selectedCount, note),
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
                     val targets = plan.clocks
                     state.deletePlan = null
                     scope.launch {
-                        // 单个失败不阻断其余删除(仓库层已保证失败不写库);批量执行在 VM 内,
-                        // 返回 true = 被删的正是引擎当前认的时钟(含暂停态)→ 补一条 stop
-                        if (vm.deleteProfiles(targets)) TimerCommands.stop(ctx)
+                        // 批量执行(含删除前的停机结算)在 VM 里;单个失败不阻断其余
+                        vm.deleteProfiles(targets)
                         onDeleteModeExit()
                     }
                 }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }

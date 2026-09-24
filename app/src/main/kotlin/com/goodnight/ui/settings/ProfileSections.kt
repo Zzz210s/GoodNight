@@ -60,6 +60,11 @@ internal data class DeletePlan(
     val count: Int get() = clocks.size
     val archiveCount: Int get() = archivedIds.size
     val anyArchive: Boolean get() = archivedIds.isNotEmpty()
+    /**
+     * 用户**勾选**的条数(按钮上的计数口径):[count] 只是真正要执行的那些,被「至少保留 1 个
+     * 活跃时钟」扣下的 [keptIds] 也在勾选里 —— 确认框首句用本值,按钮与正文的两个数字才不会打架。
+     */
+    val selectedCount: Int get() = count + keptIds.size
 
     /** 无历史、会真删的那些 */
     val removed: List<ProfileEntity> get() = clocks.filter { it.id !in archivedIds }
@@ -110,10 +115,11 @@ internal fun planDeletion(
 )
 
 /**
- * v2.2 Task 5(复审修复):删除后要不要发 stop —— 被删的正是**引擎当前认的**时钟。
- * RUNNING 的卡片不可勾选,所以实际只会碰到 PAUSED;判据仍写上两者,免得「只看 RUNNING」的
- * 旧口径再漏掉暂停态(暂停中删行后快照仍指着它,之后 resume/终止结算会写出悬空 profileId)。
+ * v2.2 Task 5(复审修复 W1):删除**前**是否必须先停机结算 —— 引擎正**暂停**在这个时钟上。
+ *
+ * 停机是为了让暂停段的窗口在**行还在库里**的时候落账([EventApplier] 不校验 profile 存在性,
+ * 先删行会把结算写成悬空引用)。运行中的时钟卡片不可勾选(也删不掉),所以只管暂停态;
+ * 引擎空闲 / 认的是别的时钟 / 已在别的状态时不必动它。
  */
-internal fun shouldStopAfterDelete(snap: RuntimeSnapshot?, deletedId: Long): Boolean =
-    snap?.profileId == deletedId &&
-        (snap.status == EngineStatus.RUNNING || snap.status == EngineStatus.PAUSED)
+internal fun needsSettleBeforeDelete(snap: RuntimeSnapshot?, deletedId: Long): Boolean =
+    snap?.profileId == deletedId && snap.status == EngineStatus.PAUSED

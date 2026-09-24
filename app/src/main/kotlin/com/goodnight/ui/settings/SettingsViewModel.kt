@@ -7,11 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.goodnight.data.ReminderIntensity
 import com.goodnight.data.db.ProfileEntity
-import com.goodnight.data.db.ProfileMode
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
 import com.goodnight.timer.EnginePolicy
-import com.goodnight.timer.EngineStatus
 import com.goodnight.timer.PolicyAction
 import com.goodnight.timer.RuntimeSnapshot
 import kotlinx.coroutines.flow.SharingStarted
@@ -115,76 +113,12 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
     /** v2.2:作用域内重名返回 false(Task 5 据此给中文错误提示) */
     suspend fun renameProfile(id: Long, name: String): Boolean = graph.profileRepo.rename(id, name)
 
-    /**
-     * v2.2 Task 5(复审修复):编辑提交的「先搬迁再改名」两步 —— 两步都要过「作用域内唯一」。
-     * 先搬迁能让改名按**新**作用域判定(否则「搬到 B 并换成 B 里空闲的名字」会被旧作用域 A 的同名行误判)。
-     * 搬迁已落库时改名失败必须把归属**搬回原值**,否则留下「已换归属、名字未改」的半成品。
-     * @return false = 任一步被拒,且已回滚到调用前状态(调用方据此提示目标作用域重名)
-     */
-    suspend fun commitScopeAndName(p: ProfileEntity, taskId: Long?, name: String): Boolean {
-        val moved = taskId != p.taskId
-        if (moved && !graph.profileRepo.moveTo(p.id, taskId)) return false
-        if (name == p.name) return true
-        if (graph.profileRepo.rename(p.id, name)) return true
-        if (moved) graph.profileRepo.moveTo(p.id, p.taskId)
-        return false
-    }
-
     /** @return true 时调用方需发 TimerCommands.restartPhase(mode 参数为对话框当前选中的模式) */
     suspend fun editDurations(p: ProfileEntity, workMinutes: Int, restMinutes: Int, mode: Int): Boolean {
         val action = EnginePolicy.onEditDurations(graph.engine.snapshot.value, p.id)
         if (action == PolicyAction.IGNORED) return false
         graph.profileRepo.updateDurations(p.id, workMinutes, restMinutes, mode)
         return action == PolicyAction.RESTART_PHASE
-    }
-
-    /**
-     * @return true 时调用方需先发 TimerCommands.stop 再删除
-     *
-     * v2.2 Task 5(设计 §4 拍板 2):有历史(会话段或每日合计)→ **归档** —— 行保留、
-     * 列表隐藏、历史账一行不删,所以不发 stop;无历史 → 真删。两者都受「至少保留 1 个**活跃**
-     * 时钟」门控(指针 1/3:归档行不算数,也不再调
-     * [com.goodnight.data.DailyTotalRepository.deleteProfileData] —— 那是清账路径,与归档冲突)。
-     * 复审修复:归档同样受该门控约束(归档后列表为空 → 首页开始键失效)。
-     */
-    suspend fun deleteProfile(p: ProfileEntity): Boolean {
-        val snap = graph.engine.snapshot.value
-        // 运行中的时钟不能被拿掉(既有语义):归档同样要守,否则计时卡解析不出正在跑的时钟
-        if (snap?.status == EngineStatus.RUNNING && snap.profileId == p.id) return false
-        // 复审修复:「至少保留 1 个**活跃**时钟」也约束归档 —— 归档 = 列表隐藏,把唯一的活跃时钟
-        // 归档同样会让活跃列表清零(首页开始键失效)。判据与 [planDeletion] 同一口径。
-        if (graph.profileRepo.countActive() <= 1) return false
-        if (graph.profileRepo.hasHistory(p.id)) {
-            graph.profileRepo.removeOrArchive(p.id)
-            return false
-        }
-        return when (EnginePolicy.onDelete(snap, p.id, graph.profileRepo.countActive())) {
-            PolicyAction.RESET_THEN_DELETE -> {
-                graph.profileRepo.removeOrArchive(p.id)
-                true // 调用方发 stop(顺序:reset 引擎结算后清快照;DB 行已删)
-            }
-            PolicyAction.DELETE -> {
-                graph.profileRepo.removeOrArchive(p.id)
-                false
-            }
-            else -> false
-        }
-    }
-
-    /**
-     * v2.2 Task 5:删除确认框的执行体(批量)—— 逐个删除(单个失败不阻断其余)。
-     * @return true = 调用方需发 [com.goodnight.service.TimerCommands.stop]:被删的正是引擎当前认的
-     * 时钟(**RUNNING 与 PAUSED 都算**,复审修复)。暂停中走 [PolicyAction.RESET_THEN_DELETE]
-     * (行已删 + 需 stop),旧判据只看 RUNNING → 快照继续指着不存在的 profileId。
-     */
-    suspend fun deleteProfiles(targets: List<ProfileEntity>): Boolean {
-        var stop = false
-        targets.forEach { p ->
-            runCatching {
-                if (deleteProfile(p) && shouldStopAfterDelete(graph.engine.snapshot.value, p.id)) stop = true
-            }
-        }
-        return stop
     }
 
     /** suspend 落库(非计划里的 viewModelScope 发射后不管):Robolectric 主循环暂停, fire-and-forget
