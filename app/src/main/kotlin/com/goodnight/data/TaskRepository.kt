@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 class TaskRepository(private val db: GoodNightDatabase) {
     private val dao: TaskDao = db.taskDao()
     private val sessionDao = db.focusSessionDao()
+    private val profileDao = db.profileDao()
 
     fun observeActive(): Flow<List<TaskEntity>> = dao.observeActive()
     fun observeDone(): Flow<List<TaskEntity>> = dao.observeDone()
@@ -55,9 +56,14 @@ class TaskRepository(private val db: GoodNightDatabase) {
     suspend fun setDone(id: Long, done: Boolean, now: Long) =
         dao.setDone(id, done, if (done) now else null)
 
-    /** 删除任务与解绑同事务:段保留(时间账保留),只把 taskId 置空;其它任务引用不受影响 */
+    /**
+     * 删除任务与解绑同事务:段保留(时间账保留),只把 taskId 置空;
+     * v2.2 起该任务的**专属时钟转为通用**(`profile.taskId = NULL`,行与计时设置都保留),
+     * 否则任务行消失后时钟会变成指向已删任务的悬挂引用。其它任务引用不受影响。
+     */
     suspend fun deleteTask(id: Long) = db.withTransaction {
         dao.clearTaskRefs(id)
+        profileDao.clearTaskRefs(id)
         dao.deleteById(id)
     }
 

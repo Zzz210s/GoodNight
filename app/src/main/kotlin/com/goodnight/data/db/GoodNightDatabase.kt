@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [ProfileEntity::class, DailyTotalEntity::class, FocusSessionEntity::class, TaskEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class GoodNightDatabase : RoomDatabase() {
@@ -62,12 +62,32 @@ abstract class GoodNightDatabase : RoomDatabase() {
         }
 
         /**
+         * v4 -> v5(v2.2 Task 1):时钟归属到任务 —— profile 增 `taskId`(可空,NULL = 通用时钟)
+         * 与 `archived`(有历史引用的时钟被删时归档,行保留、列表隐藏)。
+         *
+         * `name` 的全局唯一索引降级为普通索引:「作用域内唯一」(同一任务内 + 通用之间)
+         * 由仓库层保证 —— SQLite 的唯一索引把 NULL 视为互不相同,索引层表达不了
+         * 「通用时钟之间也唯一」,留下唯一索引只会制造假安全感。
+         * 存量数据不动:老时钟全部 taskId = NULL(通用)、archived = 0。
+         * 索引名/列必须与实体声明逐字一致(Room 打开已迁移库时校验)。
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `profile` ADD COLUMN `taskId` INTEGER")
+                db.execSQL("ALTER TABLE `profile` ADD COLUMN `archived` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("DROP INDEX IF EXISTS `index_profile_name`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_profile_taskId` ON `profile` (`taskId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_profile_name` ON `profile` (`name`)")
+            }
+        }
+
+        /**
          * v1.11.2:[name] 可覆盖库文件名 —— 单元测试用它给每个测试类独立的库文件,
          * 避免同一 Robolectric 沙箱里多个测试类共享 "goodnight.db" 造成的 SQLITE_BUSY / 数据串扰。
          */
         fun build(context: Context, name: String = "goodnight.db"): GoodNightDatabase =
             Room.databaseBuilder(context, GoodNightDatabase::class.java, name)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

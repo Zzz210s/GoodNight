@@ -37,9 +37,9 @@ class SettingsViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "sv1")
         g.bootstrap()
         val vm = SettingsViewModel(g)
-        val id = vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)
+        val id = vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)!!
         assertTrue(id > 0)
-        assertEquals(-1L, vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)) // 重名拒绝
+        assertNull("重名拒绝", vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN))
         vm.renameProfile(id, "深度专注")
         vm.editDurations(ProfileEntity(id, "x", 1, 1, 0), 45, 15, ProfileMode.COUNTDOWN)
         assertEquals(45, g.profileRepo.byId(id)!!.workMinutes)
@@ -53,7 +53,7 @@ class SettingsViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "sv_mode")
         g.bootstrap()
         val vm = SettingsViewModel(g)
-        val id = vm.createProfile("正计时", 45, 10, ProfileMode.COUNTUP)
+        val id = vm.createProfile("正计时", 45, 10, ProfileMode.COUNTUP)!!
         assertTrue(id > 0)
         assertEquals(ProfileMode.COUNTUP, g.profileRepo.byId(id)!!.mode)
         assertEquals(ProfileMode.COUNTUP, g.profileRepo.modeOf(id)) // modeOf 同源
@@ -71,7 +71,7 @@ class SettingsViewModelTest {
         g.bootstrap()
         val vm = SettingsViewModel(g)
         // #3 首装空库:自建一行后才谈得上改时长策略
-        val id = vm.createProfile("专注", 25, 5, ProfileMode.COUNTDOWN)
+        val id = vm.createProfile("专注", 25, 5, ProfileMode.COUNTDOWN)!!
         g.engine.restore(snap(EngineStatus.RUNNING, profileId = id))
         assertFalse(vm.editDurations(ProfileEntity(id, "a", 1, 1, 0), 30, 10, ProfileMode.COUNTDOWN)) // RUNNING 拒
         assertEquals(25, g.profileRepo.byId(id)!!.workMinutes) // IGNORED 不写(建时 25 保持)

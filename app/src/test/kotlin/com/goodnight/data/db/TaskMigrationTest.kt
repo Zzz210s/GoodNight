@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,6 +18,7 @@ import org.robolectric.annotation.Config
 
 /**
  * v2.1 Task 1:schema v3 -> v4(新增 `task` 表 + `focus_session.taskId` 可空列)。
+ * v2.2 Task 1:迁移链随之延伸到 v5(手工 v3 库一次跑完 3->4->5),旧时钟成为通用时钟。
  *
  * Room 的 databaseBuilder 总是按当前类版本建库,无法"先建 v3 再升 v4",
  * 故沿用 [com.goodnight.data.ModeMigrationTest] 的做法:手工构造 v3 库文件
@@ -48,7 +50,7 @@ class TaskMigrationTest {
         ApplicationProvider.getApplicationContext<Context>().deleteDatabase(dbName)
     }
 
-    /** 手工建 v3 库 + 插旧数据 -> 开 v4(触发 3->4):旧行逐值保留,task 表可用 */
+    /** 手工建 v3 库 + 插旧数据 -> 开到 v5(触发 3->4->5):旧行逐值保留,task 表可用 */
     @Test fun migration3To4KeepsOldRowsAndAddsTaskTable() = runTest {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         ctx.deleteDatabase(dbName)
@@ -71,6 +73,7 @@ class TaskMigrationTest {
                 GoodNightDatabase.MIGRATION_1_2,
                 GoodNightDatabase.MIGRATION_2_3,
                 GoodNightDatabase.MIGRATION_3_4,
+                GoodNightDatabase.MIGRATION_4_5,
             )
             .build()
 
@@ -79,6 +82,8 @@ class TaskMigrationTest {
         assertEquals("写作", profile.name)
         assertEquals(50, profile.workMinutes)
         assertEquals(ProfileMode.COUNTUP, profile.mode)
+        assertNull("v2.2:v4 -> v5 后旧时钟成为通用时钟", profile.taskId)
+        assertFalse("v2.2:旧时钟未归档", profile.archived)
         val rows = db!!.focusSessionDao().between(0, 9999)
         assertEquals(1, rows.size)
         assertEquals(1L, rows.first().profileId)
@@ -92,7 +97,7 @@ class TaskMigrationTest {
         assertEquals(1, db!!.taskDao().observeActive().first().size)
     }
 
-    /** 升级后的 v4 库:任务 DAO 全部查询/更新可用(taskId 可写可清空) */
+    /** 升级后的库(v5):任务 DAO 全部查询/更新可用(taskId 可写可清空) */
     @Test fun taskDaoWorksOnMigratedDatabase() = runTest {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         ctx.deleteDatabase(dbName)
@@ -111,6 +116,7 @@ class TaskMigrationTest {
                 GoodNightDatabase.MIGRATION_1_2,
                 GoodNightDatabase.MIGRATION_2_3,
                 GoodNightDatabase.MIGRATION_3_4,
+                GoodNightDatabase.MIGRATION_4_5,
             )
             .build()
         val dao = db!!.taskDao()

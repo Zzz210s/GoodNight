@@ -48,12 +48,12 @@ class DbTest {
 
     @Test fun uniqueNameRejected() = runTest {
         profiles.create("A", 25, 5)
-        profiles.create("A", 30, 10) // 同名:忽略,返回-1
+        profiles.create("A", 30, 10) // 同名:忽略,返回 null(v2.2 起)
         assertEquals(1, profiles.profiles.first().size)
     }
 
     @Test fun addWorkAccumulatesSameDaySameProfile() = runTest {
-        val id = profiles.create("A", 25, 5)
+        val id = profiles.create("A", 25, 5)!!
         totals.addWork("2026-08-31", id, 60_000)
         totals.addWork("2026-08-31", id, 30_000)
         val day = totals.dayTotals("2026-01-01").first().single()
@@ -62,15 +62,15 @@ class DbTest {
     }
 
     @Test fun dayTotalsSumsAcrossProfiles() = runTest {
-        val a = profiles.create("A", 25, 5)
-        val b = profiles.create("B", 50, 10)
+        val a = profiles.create("A", 25, 5)!!
+        val b = profiles.create("B", 50, 10)!!
         totals.addWork("2026-08-31", a, 60_000)
         totals.addWork("2026-08-31", b, 60_000)
         assertEquals(120_000L, totals.dayTotals("2026-01-01").first().single().total)
     }
 
     @Test fun profileTotalsSumsAcrossDays() = runTest {
-        val a = profiles.create("A", 25, 5)
+        val a = profiles.create("A", 25, 5)!!
         profiles.create("B", 50, 10)
         totals.addWork("2026-08-30", a, 60_000)
         totals.addWork("2026-08-31", a, 60_000)
@@ -81,7 +81,7 @@ class DbTest {
     }
 
     @Test fun dayTotalsFiltersByFromDate() = runTest {
-        val a = profiles.create("A", 25, 5)
+        val a = profiles.create("A", 25, 5)!!
         totals.addWork("2026-01-01", a, 1)
         totals.addWork("2026-08-31", a, 1)
         val days = totals.dayTotals("2026-06-01").first()
@@ -106,8 +106,8 @@ class DbTest {
     @Test fun rangeBreakdownGroupsByDateAndProfileWithInclusiveBounds() = runTest {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "db_range")
-        val a = g.profileRepo.create("A", 25, 5)
-        val b = g.profileRepo.create("B", 50, 10)
+        val a = g.profileRepo.create("A", 25, 5)!!
+        val b = g.profileRepo.create("B", 50, 10)!!
         // 边界日(from/to)都应计入;区间外日期不计
         g.totalsRepo.addWork("2026-09-01", a, 30 * 60_000L) // = from
         g.totalsRepo.addWork("2026-09-01", a, 15 * 60_000L) // 同日同配置累加

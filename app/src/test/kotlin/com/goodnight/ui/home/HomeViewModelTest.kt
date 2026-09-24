@@ -57,8 +57,8 @@ class HomeViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "hv_daydetail")
         g.bootstrap()
         // #3 首装空库:无种子行,明细归属完全由测试自建的 id 决定
-        val pomoId = g.profileRepo.create("番茄", 25, 5)
-        val deepId = g.profileRepo.create("深度", 50, 10)
+        val pomoId = g.profileRepo.create("番茄", 25, 5)!!
+        val deepId = g.profileRepo.create("深度", 50, 10)!!
         val today = java.time.LocalDate.now()
         g.totalsRepo.addWork(today.toString(), pomoId, 30 * 60_000L)
         g.totalsRepo.addWork(today.toString(), deepId, 90 * 60_000L)
@@ -78,7 +78,7 @@ class HomeViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "hv_daydetail_live")
         g.bootstrap()
         val today = java.time.LocalDate.now()
-        val id = g.profileRepo.create("专注", 25, 5)
+        val id = g.profileRepo.create("专注", 25, 5)!!
         g.totalsRepo.addWork(today.toString(), id, 30 * 60_000L)
         val vm = HomeViewModel(g)
         vm.selectDay(today)
@@ -99,8 +99,8 @@ class HomeViewModelTest {
         // v1.10.8:删除配置时级联清掉它的段落与合计 —— 每日详情不再出现"已删除配置"行
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "hv_deleted")
         g.bootstrap()
-        val pomoId = g.profileRepo.create("番茄", 25, 5)
-        val tempId = g.profileRepo.create("临时", 25, 5)
+        val pomoId = g.profileRepo.create("番茄", 25, 5)!!
+        val tempId = g.profileRepo.create("临时", 25, 5)!!
         val today = java.time.LocalDate.now()
         g.totalsRepo.addWork(today.toString(), pomoId, 30 * 60_000L)
         g.totalsRepo.addWork(today.toString(), tempId, 90 * 60_000L)
@@ -125,7 +125,7 @@ class HomeViewModelTest {
         // v1.10.8:合并规则(间隔<=3 分钟)与合计同源:显示合并了几段,合计就含那几段
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "hv_consistent")
         g.bootstrap()
-        val id = g.profileRepo.create("专注", 25, 5)
+        val id = g.profileRepo.create("专注", 25, 5)!!
         val today = java.time.LocalDate.now()
         val zone = java.time.ZoneId.systemDefault()
         val t0 = today.atStartOfDay(zone).toInstant().toEpochMilli() + 9 * 3_600_000L

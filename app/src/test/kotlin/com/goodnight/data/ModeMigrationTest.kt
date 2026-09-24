@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,6 +29,9 @@ import org.robolectric.annotation.Config
  *
  * v2.1 Task 1:GoodNightDatabase.build 已注册 MIGRATION_3_4,本测试随之覆盖 v1 -> v4 全链
  * (1->2->3->4 一次跑完),断言 profile/daily_total 逐值保留、focus_session/task 可用。
+ *
+ * v2.2 Task 1:链路再延伸一级到 v5(1->2->3->4->5),升级来的时钟必须落在「通用时钟」
+ * (`taskId = NULL`、`archived = 0`),老库的 `index_profile_name` 唯一约束被降级为普通索引。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = android.app.Application::class)
@@ -63,8 +67,8 @@ class ModeMigrationTest {
         db = Room.inMemoryDatabaseBuilder(ctx, GoodNightDatabase::class.java)
             .allowMainThreadQueries().build()
         val repo = ProfileRepository(db!!.profileDao(), time)
-        val a = repo.create("专注", 25, 5) // 缺省 COUNTDOWN
-        val b = repo.create("写作", 90, 0, ProfileMode.COUNTUP)
+        val a = repo.create("专注", 25, 5)!! // 缺省 COUNTDOWN
+        val b = repo.create("写作", 90, 0, ProfileMode.COUNTUP)!!
         assertTrue(a > 0 && b > 0)
         assertEquals(ProfileMode.COUNTDOWN, repo.modeOf(a))
         assertEquals(ProfileMode.COUNTUP, repo.modeOf(b))
@@ -73,7 +77,7 @@ class ModeMigrationTest {
         assertEquals(ProfileMode.COUNTUP, flowMode)
     }
 
-    /** 旧库升级:手工建 v1 schema + 插一行 -> 经注册迁移开 v4,行保留且 mode=0 */
+    /** 旧库升级:手工建 v1 schema + 插一行 -> 经注册迁移开 v5,行保留且 mode=0、时钟成为通用 */
     @Test fun upgradeV1KeepsRowsAndDefaultsModeToCountdown() = runTest {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val path = ctx.getDatabasePath("goodnight.db").absolutePath
@@ -89,10 +93,10 @@ class ModeMigrationTest {
             "VALUES ('2026-08-30', 1, 3600000, 1700000001000)")
         v1.close()
 
-        // GoodNightDatabase.build 内含 addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        // GoodNightDatabase.build 内含 addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         db = GoodNightDatabase.build(ctx)
-        // v2.1 Task 1:迁移链已延伸到 v4(1->2->3->4 一次跑完),user_version 落在 4
-        assertEquals(4, db!!.openHelper.writableDatabase.version)
+        // v2.2 Task 1:迁移链已延伸到 v5(1->2->3->4->5 一次跑完),user_version 落在 5
+        assertEquals(5, db!!.openHelper.writableDatabase.version)
         val repo = ProfileRepository(db!!.profileDao(), time)
         val rows = repo.profiles.first()
         assertEquals("旧行保留且仅一行", 1, rows.size)
@@ -100,9 +104,11 @@ class ModeMigrationTest {
         assertEquals("老番茄", old.name)
         assertEquals(25, old.workMinutes)
         assertEquals(ProfileMode.COUNTDOWN, old.mode) // 升级行 mode 补 0
+        assertNull("v5:老时钟成为通用时钟", old.taskId)
+        assertFalse("v5:老时钟未归档", old.archived)
         assertEquals(ProfileMode.COUNTDOWN, repo.modeOf(old.id))
         // 升级后新库能力完整:可继续写入(mode 透传)
-        val id2 = repo.create("新配置", 50, 10, ProfileMode.COUNTUP)
+        val id2 = repo.create("新配置", 50, 10, ProfileMode.COUNTUP)!!
         assertTrue(id2 > old.id)
         assertEquals(ProfileMode.COUNTUP, repo.modeOf(id2))
         assertEquals(2, repo.count())

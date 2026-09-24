@@ -87,7 +87,7 @@ class HomeTaskChipTest {
     @Test fun unboundSpanHasNoTaskName() = runTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "htc_detail_unbound")
         g.bootstrap()
-        val pid = g.profileRepo.create("专注", 25, 5)
+        val pid = g.profileRepo.create("专注", 25, 5)!!
         val day = LocalDate.now()
         val t0 = dayStart(day) + 9 * 3_600_000L
         g.totalsRepo.recordWorkSession(pid, t0, t0 + 30 * 60_000L)
@@ -107,7 +107,7 @@ class HomeTaskChipTest {
     @Test fun taskCutSplitsDisplaySpansInsideMergedBlock() = runTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "htc_detail_cut")
         g.bootstrap()
-        val pid = g.profileRepo.create("专注", 25, 5)
+        val pid = g.profileRepo.create("专注", 25, 5)!!
         val a = g.taskRepo.create("写周报", g.time.now())!!
         val b = g.taskRepo.create("读论文", g.time.now())!!
         val day = LocalDate.now()
@@ -129,7 +129,7 @@ class HomeTaskChipTest {
     @Test fun sameTaskRowsMergeIntoOneNamedSpan() = runTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "htc_detail_same")
         g.bootstrap()
-        val pid = g.profileRepo.create("专注", 25, 5)
+        val pid = g.profileRepo.create("专注", 25, 5)!!
         val a = g.taskRepo.create("写周报", g.time.now())!!
         val day = LocalDate.now()
         val t0 = dayStart(day) + 9 * 3_600_000L

@@ -47,7 +47,7 @@ class AppGraphTest {
         assertEquals(0, g1.profileRepo.count())
         // 用非 Flow 访问取行:observeAll 会启动 Room Invalidation Tracker,
         // 其后台刷新线程在 Robolectric 按线程登记的 legacy SQLite 影子下会 Illegal connection pointer
-        val id = g1.profileRepo.create("测试", 25, 5)
+        val id = g1.profileRepo.create("测试", 25, 5)!!
         g1.engine.restore(null)
         g1.engine.start(id, 60_000L, 30_000L)
         // appScope 是真实 Default dispatcher,轮询等待 persist 完成
