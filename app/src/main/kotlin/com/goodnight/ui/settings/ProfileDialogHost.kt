@@ -131,10 +131,15 @@ internal fun ProfileDialogHost(
         val body = when {
             // 计划为空 = 选中的就是最后一个活跃时钟(有历史也不归档:归档同样让它从列表消失)
             plan.count == 0 -> stringResource(R.string.delete_keep_one)
-            plan.anyArchive -> stringResource(
+            // 分钟为 0 时不说「已记录的 0 分钟不丢」(在用但无历史就是这种),换一句不提分钟的措辞
+            plan.anyArchive && plan.archiveMinutes > 0 -> stringResource(
                 R.string.delete_confirm_archive_body,
                 plan.selectedCount, plan.archiveCount, plan.archiveMinutes,
                 plan.count - plan.archiveCount,
+            )
+            plan.anyArchive -> stringResource(
+                R.string.delete_confirm_archive_body_no_minutes,
+                plan.selectedCount, plan.archiveCount, plan.count - plan.archiveCount,
             )
             else -> stringResource(R.string.delete_confirm_body, plan.count)
         }

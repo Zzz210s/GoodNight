@@ -86,10 +86,11 @@ class ProfileRepository(
         dao.moveAndRenameIfFree(id, taskId, name) > 0
 
     /**
-     * 无条件归档(行保留、列表隐藏)。调用方已判定该行**必须留下** —— 正被引擎选中(结算仍会
+     * 无条件归档(行保留、列表隐藏)。调用方已判定该行**必须留下** —— 可能马上被引擎使用(结算仍会
      * 写到它身上)或已有历史;这里不再判引用:真删路径请走 [removeOrArchive]。
+     * @return false = 行根本不存在(此时什么都没归档,调用方应按「无此行」处理)
      */
-    suspend fun archive(id: Long) = dao.archiveById(id)
+    suspend fun archive(id: Long): Boolean = dao.archiveById(id) > 0
 
     /**
      * v2.2:删时钟。有会话段或每日合计引用 → 归档(行保留,历史仍可解析其名);无引用 → 真删。

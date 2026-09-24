@@ -107,12 +107,6 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
         // 对话框带模式选择(新建缺省倒计时由对话框状态决定);禁缺省:模式是显式用户选择
         graph.profileRepo.create(name, workMinutes, restMinutes, mode, taskId)
 
-    /** v2.2 Task 5:改归属(通用 ↔ 任务);false = 目标作用域已有同名活跃时钟,UI 必须提示 */
-    suspend fun moveToProfile(id: Long, taskId: Long?): Boolean = graph.profileRepo.moveTo(id, taskId)
-
-    /** v2.2:作用域内重名返回 false(Task 5 据此给中文错误提示) */
-    suspend fun renameProfile(id: Long, name: String): Boolean = graph.profileRepo.rename(id, name)
-
     /** @return true 时调用方需发 TimerCommands.restartPhase(mode 参数为对话框当前选中的模式) */
     suspend fun editDurations(p: ProfileEntity, workMinutes: Int, restMinutes: Int, mode: Int): Boolean {
         val action = EnginePolicy.onEditDurations(graph.engine.snapshot.value, p.id)

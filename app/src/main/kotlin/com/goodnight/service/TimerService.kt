@@ -123,9 +123,9 @@ class TimerService : Service() {
     /**
      * 空闲收尾:脱离前台 + 空闲通知 + stopSelf。
      *
-     * 投递归属(复审修复):本函数只负责「计时 → 空闲」那一瞬間的 showIdle;管理页删/归档后
-     * 的补投归 `ui.settings.deleteProfiles`(那时服务已经拆走,没人会再投)。两侧用 serviceAttached
-     * 单侧仲裁,不再出现两次投递互相覆盖。
+     * 投递归属(复审修复):本函数负责「计时 → 空闲」那一瞬的 showIdle;管理页删/归档后的
+     * 补投归 `ui.settings.deleteProfiles`。两处的 showIdle 都是读当前活跃列表后**幂等重投**,
+     * 谁后投都对(同一份数据算出来的同一张通知);因此不存在「两侧都以为对方会投」的空档。
      */
     private fun tearDownToIdle() {
         com.goodnight.diag.DiagLog.add("Svc", "空闲收尾：脱离前台 + 空闲通知 + stopSelf")

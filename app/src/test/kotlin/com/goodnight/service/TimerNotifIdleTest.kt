@@ -114,8 +114,9 @@ class TimerNotifIdleTest {
      *
      * showIdle 原先只在 MainActivity.onCreate / TimerService 收尾时调;管理页把选中时钟归档后
      * 没人重投,通知栏仍显示已下架时钟(连「启动」按钮一起,按下去就是 ACTION_START + 归档 id)。
-     * 现在这条补投的**唯一负责人**是 [SettingsViewModel.deleteProfiles](引擎空闲且服务已拆时);
-     * 「计时 → 空闲」那一瞬间的投递归服务侧的 `tearDownToIdle`,两侧用 serviceAttached 单侧仲裁。
+     * 现在这条补投由 [SettingsViewModel.deleteProfiles] 负责(与 `tearDownToIdle` 同一幂等 showIdle):
+     * 只要 `snapshot == null`(空闲)就重投,不仲裁服务是否挂载 —— 服务挂载着但最后一次空闲
+     * 投递已经发生时,单侧仲裁会让两侧都不投,通知栏永远停在刚下架的时钟名上。
      */
     @Test fun archivingSelectedClockRefreshesIdleNotification() = runBlocking {
         val live = clock("在用")
@@ -131,5 +132,27 @@ class TimerNotifIdleTest {
 
         assertTrue("行保留并归档", g.profileRepo.byId(live.id)!!.archived)
         assertEquals("归档后必须重投空闲通知:回退到活跃时钟", other.name, awaitTitle(other.name))
+    }
+
+    /**
+     * W4:服务**已挂载**但引擎已空闲(最后一次空闲投递已发生)时也必须重投。旧实现仲裁
+     * `serviceAttached` —— 这种状态两侧都不投,通知栏停在刚下架的时钟名上不动;`snapshot == null`
+     * 已足以避免覆盖计时态的前台通知,故不再需要这条仲裁。
+     */
+    @Test fun archivingSelectedClockRedeliversIdleWhenServiceAttached() = runBlocking {
+        val live = clock("在用")
+        val other = clock("另一个")
+        g.db.focusSessionDao().insertAll(
+            listOf(FocusSessionEntity(profileId = live.id, startAt = 0, endAt = 25 * 60_000L))
+        )
+        g.settingsRepo.setActiveProfile(live.id)
+        TimerNotifIdle.showIdle(ctx)
+        assertEquals("先在通知栏挂上选中的时钟", live.name, awaitTitle(live.name))
+        g.coordinator.serviceAttached = true // 服务还挂着、引擎已空闲:旧实现在这里漏投
+
+        SettingsViewModel(g).deleteProfiles(listOf(live))
+
+        assertTrue("行保留并归档", g.profileRepo.byId(live.id)!!.archived)
+        assertEquals("服务挂载着也要重投:回退到活跃时钟", other.name, awaitTitle(other.name))
     }
 }

@@ -41,7 +41,7 @@ class SettingsViewModelTest {
         val id = vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)!!
         assertTrue(id > 0)
         assertNull("重名拒绝", vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN))
-        vm.renameProfile(id, "深度专注")
+        g.profileRepo.rename(id, "深度专注")
         vm.editDurations(ProfileEntity(id, "x", 1, 1, 0), 45, 15, ProfileMode.COUNTDOWN)
         assertEquals(45, g.profileRepo.byId(id)!!.workMinutes)
         assertEquals("深度专注", g.profileRepo.byId(id)!!.name)

@@ -134,14 +134,13 @@ class ProfileManageTest {
         g.db.focusSessionDao().insertAll(
             listOf(FocusSessionEntity(profileId = p.id, startAt = 0, endAt = 25 * 60_000L, taskId = a))
         )
-        val v = vm()
 
-        assertTrue(v.moveToProfile(p.id, b))
+        assertTrue(g.profileRepo.moveTo(p.id, b))
         assertEquals(b, g.profileRepo.byId(p.id)!!.taskId)
         assertEquals("改归属不动会话行(仍归原任务)", a, g.db.focusSessionDao().getAll().single().taskId)
 
         clock("专注", null) // 通用层已有同名
-        assertFalse("目标作用域重名:拒绝且保持原归属", v.moveToProfile(p.id, null))
+        assertFalse("目标作用域重名:拒绝且保持原归属", g.profileRepo.moveTo(p.id, null))
         assertEquals(b, g.profileRepo.byId(p.id)!!.taskId)
         assertEquals("失败时一行都没动", 1, g.db.focusSessionDao().getAll().size)
     }

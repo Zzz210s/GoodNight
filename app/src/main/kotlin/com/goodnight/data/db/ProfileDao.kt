@@ -59,9 +59,12 @@ interface ProfileDao {
     @Query("UPDATE profile SET taskId = NULL, name = :name WHERE id = :id")
     suspend fun freeToGeneric(id: Long, name: String)
 
-    /** 归档(行保留、列表隐藏);判定见 [deleteIfUnreferenced] */
+    /**
+     * 归档(行保留、列表隐藏);判定见 [deleteIfUnreferenced]。
+     * @return rowsAffected:0 = 行不存在(调用方不能对空行谎称「已归档、历史保留」)
+     */
     @Query("UPDATE profile SET archived = 1 WHERE id = :id")
-    suspend fun archiveById(id: Long)
+    suspend fun archiveById(id: Long): Int
 
     /**
      * v2.2 Task 5(复审修复 W2):「改归属 + 改名」一条带条件的语句 —— 目标作用域已有同名
