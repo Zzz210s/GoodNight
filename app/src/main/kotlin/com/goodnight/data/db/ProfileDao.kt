@@ -64,6 +64,24 @@ interface ProfileDao {
     suspend fun archiveById(id: Long)
 
     /**
+     * v2.2 Task 5:活跃(未归档)时钟数 —— 「至少保留 1 个」只算界面上看得见的行。
+     * 归档行仍在库里(历史要解析它的名字),但不能替活跃时钟挡删除,否则会出现
+     * 「列表只剩一个时钟却删不掉」的怪现象。
+     */
+    @Query("SELECT COUNT(*) FROM profile WHERE archived = 0") suspend fun countActive(): Int
+
+    /** v2.2 Task 5:该时钟是否有历史引用(会话段或每日合计)—— 口径与 [deleteIfUnreferenced] 一致 */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM focus_session WHERE profileId = :id) " +
+            "OR EXISTS(SELECT 1 FROM daily_total WHERE profileId = :id)"
+    )
+    suspend fun hasHistory(id: Long): Boolean
+
+    /** v2.2 Task 5:每个时钟已记录的**会话**毫秒(删除预告文案用);无段的时钟不出现 */
+    @Query("SELECT profileId, SUM(endAt - startAt) AS total FROM focus_session GROUP BY profileId")
+    suspend fun sessionMinutesByProfile(): List<ProfileTotal>
+
+    /**
      * v2.2 Task 2:导入事务末尾归一化 —— 时钟归属的任务不在库中时归为通用。
      * 与 [TaskDao.clearDanglingTaskRefs] 同口径:同 id 在另一台设备可能是另一个任务,
      * 悬挂引用会在之后导入那台设备的备份时被静默重绑。

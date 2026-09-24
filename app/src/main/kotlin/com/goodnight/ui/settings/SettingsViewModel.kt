@@ -8,8 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.goodnight.data.ReminderIntensity
 import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
+import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
 import com.goodnight.timer.EnginePolicy
+import com.goodnight.timer.EngineStatus
 import com.goodnight.timer.PolicyAction
 import com.goodnight.timer.RuntimeSnapshot
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,6 +30,7 @@ private data class BackupState(
 )
 
 data class SettingsUiState(
+    /** 只含**活跃**(未归档)时钟:归档行仍在库里供历史解析,但列表与选择器都不该再喂给用户 */
     val profiles: List<ProfileEntity> = emptyList(),
     val totals: Map<Long, Long> = emptyMap(),
     val intensity: ReminderIntensity = ReminderIntensity.STANDARD,
@@ -42,6 +45,10 @@ data class SettingsUiState(
     val backupError: String? = null,
     /** v1.14.0:疲劳提醒开关(同一任务连续工作 90 分钟提醒长休息) */
     val fatigueReminder: Boolean = true,
+    // v2.2 Task 5:时钟管理页的「通用 / 任务专属」两段与归属选择器
+    /** 全部任务(未完成在前)—— 分组顺序与归属选择的候选,来自 observeAllOrdered */
+    val tasks: List<TaskEntity> = emptyList(),
+    val sections: List<ClockSection> = emptyList(),
 )
 
 class SettingsViewModel(val graph: AppGraph) : ViewModel() {
@@ -50,7 +57,8 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
 
     val ui: StateFlow<SettingsUiState> = combine(
         combine(
-            graph.profileRepo.profiles,
+            // 指针 1(v2.2 Task 5):列表与「至少保留 1 个」都只看看得见的行 —— 归档行不参与
+            graph.profileRepo.observeAllActive(),
             graph.totalsRepo.profileTotals(),
             graph.settingsRepo.reminderIntensity,
             graph.engine.snapshot,
@@ -68,10 +76,12 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
             BackupState(pack, auto, uri, last, err)
         },
         graph.settingsRepo.fatigueReminder,
-    ) { s, b, fatigue ->
+        graph.taskRepo.observeAllOrdered(),
+    ) { s, b, fatigue, tasks ->
         s.copy(
             themePack = b.pack, autoBackup = b.auto, backupUri = b.uri,
             backupLastAt = b.last, backupError = b.err, fatigueReminder = fatigue,
+            tasks = tasks, sections = clockSections(s.profiles, tasks),
         )
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -88,10 +98,19 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
         }
     }
 
-    /** v2.2:重名返回 null(旧版返回 -1L,调用方一律忽略返回值) */
-    suspend fun createProfile(name: String, workMinutes: Int, restMinutes: Int, mode: Int): Long? =
+    /** v2.2:重名返回 null(旧版返回 -1L,调用方一律忽略返回值);[taskId] = 归属(null = 通用层) */
+    suspend fun createProfile(
+        name: String,
+        workMinutes: Int,
+        restMinutes: Int,
+        mode: Int,
+        taskId: Long? = null,
+    ): Long? =
         // 对话框带模式选择(新建缺省倒计时由对话框状态决定);禁缺省:模式是显式用户选择
-        graph.profileRepo.create(name, workMinutes, restMinutes, mode)
+        graph.profileRepo.create(name, workMinutes, restMinutes, mode, taskId)
+
+    /** v2.2 Task 5:改归属(通用 ↔ 任务);false = 目标作用域已有同名活跃时钟,UI 必须提示 */
+    suspend fun moveToProfile(id: Long, taskId: Long?): Boolean = graph.profileRepo.moveTo(id, taskId)
 
     /** v2.2:作用域内重名返回 false(Task 5 据此给中文错误提示) */
     suspend fun renameProfile(id: Long, name: String): Boolean = graph.profileRepo.rename(id, name)
@@ -104,22 +123,32 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
         return action == PolicyAction.RESTART_PHASE
     }
 
-    /** @return true 时调用方需先发 TimerCommands.stop 再删除 */
+    /**
+     * @return true 时调用方需先发 TimerCommands.stop 再删除
+     *
+     * v2.2 Task 5(设计 §4 拍板 2):有历史(会话段或每日合计)→ **归档** —— 行保留、
+     * 列表隐藏、历史账一行不删,所以既不发 stop 也不过「至少保留 1 个」(归档不是破坏性操作);
+     * 无历史 → 真删,受「至少保留 1 个**活跃**时钟」门控(指针 1/3:归档行不算数,也不再调
+     * [com.goodnight.data.DailyTotalRepository.deleteProfileData] —— 那是清账路径,与归档冲突)。
+     */
     suspend fun deleteProfile(p: ProfileEntity): Boolean {
-        val action = EnginePolicy.onDelete(graph.engine.snapshot.value, p.id, graph.profileRepo.count().toInt())
-        when (action) {
-            PolicyAction.IGNORED -> return false
+        val snap = graph.engine.snapshot.value
+        // 运行中的时钟不能被拿掉(既有语义):归档同样要守,否则计时卡解析不出正在跑的时钟
+        if (snap?.status == EngineStatus.RUNNING && snap.profileId == p.id) return false
+        if (graph.profileRepo.hasHistory(p.id)) {
+            graph.profileRepo.removeOrArchive(p.id)
+            return false
+        }
+        return when (EnginePolicy.onDelete(snap, p.id, graph.profileRepo.countActive())) {
             PolicyAction.RESET_THEN_DELETE -> {
-                graph.profileRepo.delete(p)
-                graph.totalsRepo.deleteProfileData(p.id)
-                return true // 调用方发 stop(顺序:reset 引擎结算后清快照;DB 行已删)
+                graph.profileRepo.removeOrArchive(p.id)
+                true // 调用方发 stop(顺序:reset 引擎结算后清快照;DB 行已删)
             }
             PolicyAction.DELETE -> {
-                graph.profileRepo.delete(p)
-                graph.totalsRepo.deleteProfileData(p.id)  // v1.10.8:级联清段落/合计,避免"已删除配置"残留
-                return false
+                graph.profileRepo.removeOrArchive(p.id)
+                false
             }
-            else -> return false
+            else -> false
         }
     }
 

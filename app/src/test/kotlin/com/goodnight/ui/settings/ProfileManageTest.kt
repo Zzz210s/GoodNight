@@ -4,8 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
-import com.goodnight.data.ProfileRemoval
 import com.goodnight.data.db.FocusSessionEntity
+import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,8 +32,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * v2.2 Task 5:时钟管理页 —— 「通用 / 任务专属(按任务分组)」两段、归属选择与改归属、
- * 删除的归档/真删预告、以及三条前序指针(活跃流口径 / 归档不满足「至少保留 1 个」/ 归档不清账)。
+ * v2.2 Task 5 用例夹具(拆两份用例文件以守住单文件 200 行:删除计划另见 ProfileDeletePlanTest)。
+ *
+ * @param storePrefix DataStore 单例按**文件名**缓存,同一个名字被多个用例共用会撞
+ * 「multiple DataStores active for the same file」,故每个用例一份(见 #432)。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "zh", application = Application::class)
@@ -42,7 +44,6 @@ class ProfileManageTest {
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var g: AppGraph
 
-    /** DataStore 单例按文件名缓存,逐用例一份(见 #432) */
     @get:Rule val testName = TestName()
 
     @Before fun setUp() {
@@ -60,15 +61,12 @@ class ProfileManageTest {
     private suspend fun clock(name: String, taskId: Long? = null) =
         g.profileRepo.byId(g.profileRepo.create(name, 25, 5, ProfileMode.COUNTDOWN, taskId)!!)!!
 
-    private suspend fun session(profileId: Long, millis: Long = 25 * 60_000L, taskId: Long? = null) =
-        g.db.focusSessionDao().insertAll(
-            listOf(FocusSessionEntity(profileId = profileId, startAt = 0, endAt = millis, taskId = taskId))
-        )
-
     /** 归档:先造一段历史(有引用才归档),再走仓库的 removeOrArchive */
-    private suspend fun archive(id: Long) {
-        session(id)
-        assertEquals(ProfileRemoval.Archived, g.profileRepo.removeOrArchive(id))
+    private suspend fun archive(clock: ProfileEntity) {
+        g.db.focusSessionDao().insertAll(
+            listOf(FocusSessionEntity(profileId = clock.id, startAt = 0, endAt = 25 * 60_000L))
+        )
+        g.profileRepo.removeOrArchive(clock.id)
     }
 
     private fun pumpUntil(cond: () -> Boolean): Boolean {
@@ -104,6 +102,20 @@ class ProfileManageTest {
         assertTrue("归档时钟不进任何段", sections.flatMap { it.clocks }.none { it.id == dead.id })
     }
 
+    /** 没有专属时钟的任务不出段(空段头纯属噪音) */
+    @Test fun emptyTasksAreNotListed() = runTest {
+        val a = task("写周报")
+        task("读论文")
+        clock("A 专属", a)
+
+        val sections = clockSections(
+            g.profileRepo.observeAllActive().first(),
+            g.taskRepo.observeAllOrdered().first(),
+        )
+
+        assertEquals(listOf("写周报"), sections.drop(1).map { it.title })
+    }
+
     /** 新建可选归属;同名在不同作用域允许、同作用域拒绝 */
     @Test fun createRespectsScope() = runTest {
         val a = task("写周报")
@@ -119,7 +131,9 @@ class ProfileManageTest {
         val a = task("写周报")
         val b = task("读论文")
         val p = clock("专注", a)
-        session(p.id, taskId = a)
+        g.db.focusSessionDao().insertAll(
+            listOf(FocusSessionEntity(profileId = p.id, startAt = 0, endAt = 25 * 60_000L, taskId = a))
+        )
         val v = vm()
 
         assertTrue(v.moveToProfile(p.id, b))
@@ -130,56 +144,6 @@ class ProfileManageTest {
         assertFalse("目标作用域重名:拒绝且保持原归属", v.moveToProfile(p.id, null))
         assertEquals(b, g.profileRepo.byId(p.id)!!.taskId)
         assertEquals("失败时一行都没动", 1, g.db.focusSessionDao().getAll().size)
-    }
-
-    /** 删除预告:被会话段或每日合计引用的时钟 → 归档;两者都没有 → 真删(与原子删除同口径) */
-    @Test fun deletePlanArchivesOnlyClocksWithHistory() = runTest {
-        val withSession = clock("有会话")
-        val withDailyOnly = clock("只有合计")
-        val clean = clock("无历史")
-        val plan = deletePlan(
-            listOf(withSession, withDailyOnly, clean),
-            sessionMillis = mapOf(withSession.id to 25 * 60_000L),
-            dailyTotals = mapOf(withDailyOnly.id to 90 * 60_000L),
-        )
-        assertEquals(3, plan.count)
-        assertEquals(2, plan.archiveCount)
-        assertEquals("归档分钟 = 会话优先 + 每日合计", 115L, plan.archiveMinutes)
-        assertTrue(plan.anyArchive)
-
-        val plain = deletePlan(listOf(clean), emptyMap(), emptyMap())
-        assertEquals(0, plain.archiveCount)
-        assertEquals(0L, plain.archiveMinutes)
-        assertFalse(plain.anyArchive)
-    }
-
-    /** 指针 3:有历史的时钟删除走归档 —— 行保留、历史账一行不删、不再调清账路径 */
-    @Test fun deleteProfileArchivesHistoryAndKeepsRecords() = runTest {
-        val p = clock("有历史")
-        session(p.id, millis = 30 * 60_000L)
-        g.totalsRepo.addWork("2026-09-24", p.id, 30 * 60_000L)
-
-        assertFalse("归档不需要发 stop", vm().deleteProfile(p))
-
-        assertTrue("行保留并标记归档", g.profileRepo.byId(p.id)!!.archived)
-        assertEquals("会话段一行不少", 1, g.db.focusSessionDao().getAll().size)
-        assertEquals(
-            "每日合计一行不少",
-            30 * 60_000L,
-            g.totalsRepo.profileTotals().first().first { it.profileId == p.id }.total,
-        )
-        assertTrue("归档后从管理页活跃流消失", g.profileRepo.observeAllActive().first().none { it.id == p.id })
-    }
-
-    /** 指针 1:归档行不算「至少保留 1 个」—— 界面上看不见的行不能替活跃时钟挡删除 */
-    @Test fun archivedClockDoesNotSatisfyKeepOneRule() = runTest {
-        val live = clock("在用")
-        val dead = clock("旧")
-        archive(dead)
-
-        assertFalse("唯一活跃时钟不可删(归档行不算数)", vm().deleteProfile(live))
-        assertNotNull("活跃时钟未被删", g.profileRepo.byId(live.id))
-        assertFalse(g.profileRepo.byId(live.id)!!.archived)
     }
 
     /** 指针 1:管理页列表只喂活跃时钟(归档行不进 UI) */

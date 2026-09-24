@@ -88,6 +88,19 @@ class ProfileRepository(
         return ProfileRemoval.Archived
     }
 
+    /**
+     * v2.2 Task 5:活跃(未归档)时钟数 —— 「至少保留 1 个」只看活跃行;归档行仍在库里,
+     * 不能替界面上看得见的时钟挡删除。
+     */
+    suspend fun countActive(): Int = dao.countActive()
+
+    /** v2.2 Task 5:是否已有历史引用(会话段或每日合计)—— 决定删除是归档还是真删 */
+    suspend fun hasHistory(id: Long): Boolean = dao.hasHistory(id)
+
+    /** v2.2 Task 5:每个时钟已记录的会话毫秒(删除预告文案「已记录的 N 分钟会保留」用) */
+    suspend fun sessionMinutes(): Map<Long, Long> =
+        dao.sessionMinutesByProfile().associate { it.profileId to it.total }
+
     /** mode 必传(Task 7 起对话框带模式选择;禁止缺省,缺省会静默改写既有 profile 的模式) */
     suspend fun updateDurations(id: Long, workMinutes: Int, restMinutes: Int, mode: Int) {
         dao.byId(id)?.let {

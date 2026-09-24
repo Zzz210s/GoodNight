@@ -27,6 +27,9 @@ class TaskRepository(private val db: GoodNightDatabase) {
     /** v2.1 Task 7:每日详情把段的 taskId 解析成任务名(重命名后卡片即时刷新) */
     fun observeAll(): Flow<List<TaskEntity>> = dao.observeAll()
 
+    /** v2.2 Task 5:管理页分组与归属选择的全任务有序表(未完成在前,已完成随后) */
+    fun observeAllOrdered(): Flow<List<TaskEntity>> = dao.observeAllOrdered()
+
     /** 标题去首尾空白后入库;空/纯空白/超 [MAX_TITLE] 字拒绝(返回 null),调用方据此提示 */
     suspend fun create(title: String, now: Long): Long? {
         val t = title.trim()

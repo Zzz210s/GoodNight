@@ -53,7 +53,9 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
 
     val ui: StateFlow<HomeUiState> = combine(
         graph.engine.ready,
-        graph.profileRepo.profiles,
+        // 指针 4(v2.2 Task 5):只喂活跃时钟 —— 归档行不能出现在顶栏选择器里,
+        // 否则选中一个已归档时钟后「开始」会真的把已下架的时钟跑起来
+        graph.profileRepo.observeAllActive(),
         graph.settingsRepo.activeProfileId,
         graph.engine.snapshot,
         graph.totalsRepo.dayTotals(from),
@@ -153,7 +155,8 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
      * 「时钟属于任务 A、账记在未绑定任务」的会话(设计只允许**通用**时钟走未绑定)。通用时钟留空。
      */
     suspend fun startSelectedClock() {
-        val profiles = graph.profileRepo.profiles.first()
+        // 同 [ui] 的口径:只看活跃时钟,归档行不能成为当前时钟
+        val profiles = graph.profileRepo.observeAllActive().first()
         val active = graph.settingsRepo.activeProfileId.first()
         val id = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: return
         val p = profiles.first { it.id == id }

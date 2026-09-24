@@ -3,6 +3,8 @@ package com.goodnight.ui.home
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.goodnight.data.ProfileRemoval
+import com.goodnight.data.db.FocusSessionEntity
 import com.goodnight.di.AppGraph
 import com.goodnight.service.ACTION_START
 import com.goodnight.service.EXTRA_PROFILE_ID
@@ -101,5 +103,24 @@ class HomeStartCommandTest {
         HomeViewModel(g).startSelectedClock()
 
         assertNull(shadowOf(app).nextStartedService)
+    }
+
+    /**
+     * 指针 4(v2.2 Task 5):选中项指向已归档时钟时不得把它跑起来 —— 回退到活跃时钟。
+     * 旧实现读全量 `profiles`(含归档),归档行会被 `firstOrNull`/`any{}` 当成可用时钟。
+     */
+    @Test fun homeStartFallsBackFromArchivedClock() = runTest {
+        val dead = g.clock("旧通用")
+        g.db.focusSessionDao().insertAll(
+            listOf(FocusSessionEntity(profileId = dead.id, startAt = 0, endAt = 25 * 60_000L))
+        )
+        assertEquals(ProfileRemoval.Archived, g.profileRepo.removeOrArchive(dead.id))
+        val live = g.clock("在用")
+        g.settingsRepo.setActiveProfile(dead.id) // 归档前选中的那个时钟
+
+        HomeViewModel(g).startSelectedClock()
+
+        val started = shadowOf(app).nextStartedService
+        assertEquals("归档时钟不能成为当前时钟,回退到活跃的那个", live.id, started.getLongExtra(EXTRA_PROFILE_ID, -1L))
     }
 }

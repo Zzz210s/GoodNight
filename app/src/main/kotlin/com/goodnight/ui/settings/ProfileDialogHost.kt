@@ -1,103 +1,168 @@
 package com.goodnight.ui.settings
 
 import com.goodnight.R
-import androidx.compose.ui.res.stringResource
 import android.content.Context
-import android.database.sqlite.SQLiteConstraintException
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.goodnight.data.db.ProfileEntity
+import com.goodnight.data.db.ProfileMode
 import com.goodnight.service.TimerCommands
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** 时钟管理页的对话框宿主(编辑/新建/批量删除确认),与列表屏解耦保持各文件 <=200 行 */
+/**
+ * 时钟管理页的对话框状态:哪个开着、编辑/新建选中的**归属**(null = 通用层)、
+ * 仓库侧重名拒绝、以及待确认的删除计划(非空 = 确认框开着,内容就是将要执行的行)。
+ */
+@Stable
+internal class ProfileDialogState {
+    var editing by mutableStateOf<ProfileEntity?>(null)
+    var creating by mutableStateOf(false)
+    var scope by mutableStateOf<Long?>(null)
+    var nameTaken by mutableStateOf(false)
+    var deletePlan by mutableStateOf<DeletePlan?>(null)
+
+    fun openEdit(p: ProfileEntity) {
+        editing = p
+        scope = p.taskId
+        nameTaken = false
+    }
+
+    fun openCreate() {
+        creating = true
+        scope = null
+        nameTaken = false
+    }
+
+    /** 关掉编辑/新建(保留删除确认框的状态不动:两条流程互不干扰) */
+    fun closeEditing() {
+        editing = null
+        creating = false
+        nameTaken = false
+    }
+}
+
+/**
+ * 时钟管理页的对话框宿主(编辑/新建/批量删除确认),与列表屏解耦保持各文件 <=200 行。
+ *
+ * 重名预校验只喂**目标作用域**的时钟(`ui.profiles.filter { it.taskId == state.scope }`,指针 2):
+ * v2.2 起「不同任务下同名」合法,拿全库比会把合法输入挡在门外。
+ */
 @Composable
 internal fun ProfileDialogHost(
     vm: SettingsViewModel,
-    editing: ProfileEntity?,
-    onEditChange: (ProfileEntity?) -> Unit,
-    creating: Boolean,
-    onCreateChange: (Boolean) -> Unit,
-    confirmDelete: Boolean,
-    onConfirmDeleteChange: (Boolean) -> Unit,
-    deleteMode: Boolean,
-    onDeleteModeExit: () -> Unit,
+    ui: SettingsUiState,
+    state: ProfileDialogState,
     runningActiveId: Long?,
-    selectedIds: Set<Long>,
-    profiles: List<ProfileEntity>,
+    onDeleteModeExit: () -> Unit,
 ) {
     val ctx: Context = LocalContext.current
     val scope: CoroutineScope = rememberCoroutineScope()
+    val genericLabel = stringResource(R.string.clock_scope_generic)
+    val scopes = remember(ui.tasks, genericLabel) {
+        listOf(ClockScope(null, genericLabel)) + ui.tasks.map { ClockScope(it.id, it.title) }
+    }
 
-    editing?.let { p ->
+    state.editing?.let { p ->
         ProfileEditDialog(
             initial = p,
-            existing = profiles,
+            existing = ui.profiles.filter { it.taskId == state.scope },
             title = ctx.getString(R.string.edit_clock),
-            onDismiss = { onEditChange(null) },
+            scopes = scopes,
+            scopeTaskId = state.scope,
+            onScopeChange = { state.scope = it; state.nameTaken = false },
+            error = if (state.nameTaken) stringResource(R.string.clock_name_taken) else null,
+            onDismiss = { state.closeEditing() },
             onConfirm = { name, w, r, mode ->
                 scope.launch {
-                    try {
-                        if (name != p.name) vm.renameProfile(p.id, name)
-                        if (vm.editDurations(p, w, r, mode)) {
-                            TimerCommands.restartPhase(ctx, p.id, w * 60_000L, r * 60_000L, mode == com.goodnight.data.db.ProfileMode.COUNTUP)
-                        }
-                        onEditChange(null)
-                    } catch (_: SQLiteConstraintException) {
-                        // 预验证后不应到达(极端并发兜底):对话框保持开启由用户改名
+                    // 先改归属再改名:[SettingsViewModel.moveToProfile] 与 renameProfile 都要过
+                    // 「作用域内唯一」;先搬迁能让改名按**新**作用域判定,否则「搬到 B 并换成 B 里
+                    // 空闲的名字」会被旧作用域 A 的同名行误判(两步都有失败分支,失败即整体不动)
+                    var ok = state.scope == p.taskId || vm.moveToProfile(p.id, state.scope)
+                    if (ok && name != p.name) ok = vm.renameProfile(p.id, name)
+                    if (!ok) {
+                        state.nameTaken = true
+                        return@launch
                     }
+                    if (vm.editDurations(p, w, r, mode)) {
+                        TimerCommands.restartPhase(
+                            ctx, p.id, w * 60_000L, r * 60_000L, mode == ProfileMode.COUNTUP,
+                        )
+                    }
+                    state.closeEditing()
                 }
             },
         )
     }
-    if (creating) {
+    if (state.creating) {
         ProfileEditDialog(
             initial = null,
-            existing = profiles,
+            existing = ui.profiles.filter { it.taskId == state.scope },
             title = ctx.getString(R.string.new_clock),
-            onDismiss = { onCreateChange(false) },
+            scopes = scopes,
+            scopeTaskId = state.scope,
+            onScopeChange = { state.scope = it; state.nameTaken = false },
+            error = if (state.nameTaken) stringResource(R.string.clock_name_taken) else null,
+            onDismiss = { state.closeEditing() },
             onConfirm = { name, w, r, mode ->
                 scope.launch {
-                    vm.createProfile(name, w, r, mode)
-                    onCreateChange(false)
+                    val id = vm.createProfile(name, w, r, mode, state.scope)
+                    if (id == null) {
+                        state.nameTaken = true
+                        return@launch
+                    }
+                    state.closeEditing()
                 }
             },
         )
     }
-    if (confirmDelete) {
+    state.deletePlan?.let { plan ->
         AlertDialog(
-            onDismissRequest = { onConfirmDeleteChange(false) },
+            onDismissRequest = { state.deletePlan = null },
             title = { Text(stringResource(R.string.delete_confirm_title)) },
-            text = { Text(stringResource(R.string.delete_confirm_body, selectedIds.size)) },
+            text = {
+                Text(
+                    when {
+                        // 计划为空 = 每条都被「至少保留 1 个时钟」挡下(有历史的会走归档,不受该规则约束)
+                        plan.count == 0 -> stringResource(R.string.delete_keep_one)
+                        plan.anyArchive -> stringResource(
+                            R.string.delete_confirm_archive_body,
+                            plan.count, plan.archiveCount, plan.archiveMinutes,
+                            plan.count - plan.archiveCount,
+                        )
+                        else -> stringResource(R.string.delete_confirm_body, plan.count)
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    onConfirmDeleteChange(false)
+                    val targets = plan.clocks
+                    state.deletePlan = null
                     scope.launch {
-                        // v1.9.12 修复删除模式无法真正删除:全选时不再静默跳过整个删除,
-                        // 而是按“至少保留 1 个时钟”规则删到剩 1(修复前:targets.size == profiles.size
-                        // 直接 return,用户确认了却什么都没删);单个删除加 try-catch 防协程中断。
-                        val targets = profiles.filter { it.id in selectedIds }
-                        val deletable = if (targets.size >= profiles.size) targets.dropLast(1) else targets
-                        deletable.forEach { p ->
-                            try {
-                                if (vm.deleteProfile(p)) {
-                                    if (runningActiveId == p.id) TimerCommands.stop(ctx)
-                                }
-                            } catch (_: Exception) {
-                                // 单个失败不阻断其余删除
+                        // 单个失败不阻断其余删除(仓库层已保证失败不写库)
+                        targets.forEach { p ->
+                            runCatching {
+                                if (vm.deleteProfile(p) && runningActiveId == p.id) TimerCommands.stop(ctx)
                             }
                         }
                         onDeleteModeExit()
                     }
                 }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { onConfirmDeleteChange(false) }) { Text(stringResource(R.string.cancel)) } },
+            dismissButton = {
+                TextButton(onClick = { state.deletePlan = null }) { Text(stringResource(R.string.cancel)) }
+            },
         )
     }
 }

@@ -1,7 +1,6 @@
 package com.goodnight.ui.settings
-import android.database.sqlite.SQLiteConstraintException
+
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,38 +24,53 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.goodnight.GoodNightApp
-import androidx.compose.ui.res.stringResource
 import com.goodnight.R
-import com.goodnight.data.db.ProfileEntity
-import com.goodnight.data.db.ProfileMode
-import com.goodnight.service.TimerCommands
 import com.goodnight.timer.EngineStatus
 import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
 import kotlinx.coroutines.launch
-/** 时钟管理:点卡片编辑;垃圾桶进删除模式(勾选+底部删除选中);运行中时钟不可选。 */
+
+/**
+ * 时钟管理:列表分「通用 / 任务专属(按任务分组)」两段(v2.2 Task 5);点卡片编辑(含改归属);
+ * 垃圾桶进删除模式(勾选 + 底部删除选中);运行中时钟不可点。
+ *
+ * 删除按设计 §4 分两种结局:有历史 → 归档(行保留、列表隐藏、账不动),无历史 → 真删;
+ * 确认框先把「保留多少分钟」说清楚(见 [ProfileDialogHost])。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfilesScreen(onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext as GoodNightApp
     val vm: SettingsViewModel = viewModel(factory = app.graph.vmFactory)
     val ui by vm.ui.collectAsStateWithLifecycle()
-    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var editing by remember { mutableStateOf<ProfileEntity?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    val state = remember { ProfileDialogState() }
     var deleteMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
-    var confirmDelete by remember { mutableStateOf(false) }
     val runningActiveId = if (ui.snap?.status == EngineStatus.RUNNING) ui.snap?.profileId else null
     BackHandler(enabled = deleteMode) { deleteMode = false; selectedIds = emptySet() }
+
+    /**
+     * 删除预告需要「已记录多少分钟」——会话段优先、缺段回落到每日合计(与 [planDeletion]
+     * 同一条口径),所以查库后才弹确认框。
+     */
+    fun requestDelete() {
+        scope.launch {
+            val sessions = app.graph.profileRepo.sessionMinutes()
+            val targets = ui.profiles.filter { it.id in selectedIds }
+            state.deletePlan = planDeletion(targets, ui.profiles.size, sessions, ui.totals)
+        }
+    }
+
     fun toggleSelect(id: Long) {
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
     }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -81,7 +92,7 @@ fun ProfilesScreen(onBack: () -> Unit) {
                         )
                     }
                     if (!deleteMode) {
-                        IconButton(onClick = { creating = true }) {
+                        IconButton(onClick = { state.openCreate() }) {
                             PathIcon(IconPaths.PLUS, size = 24.dp, contentDescription = stringResource(R.string.new_clock))
                         }
                     }
@@ -94,38 +105,14 @@ fun ProfilesScreen(onBack: () -> Unit) {
                 Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(ui.profiles, key = { it.id }) { p ->
-                    val runningActive = runningActiveId == p.id
-                    val selected = p.id in selectedIds
-                    val canTouch = !deleteMode || (!runningActive && ui.profiles.size > 1)
-                    Card(
-                        onClick = {
-                            when {
-                                deleteMode -> if (canTouch) toggleSelect(p.id)
-                                !runningActive -> editing = p
-                            }
-                        },
-                        enabled = canTouch || (!deleteMode && !runningActive),
-                        border = if (deleteMode && selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(p.name, style = MaterialTheme.typography.titleSmall)
-                            val durBase = stringResource(R.string.durations_workrest, p.workMinutes, p.restMinutes)
-                            val durationText = if (p.mode == ProfileMode.COUNTUP)
-                                durBase + stringResource(R.string.mode_tag, stringResource(R.string.mode_countup)) else durBase
-                            Text(durationText, style = MaterialTheme.typography.bodyMedium)
-                            if (deleteMode) {
-                                Text(
-                                    if (selected) stringResource(R.string.selected_tag) else stringResource(R.string.tap_select_tag),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (runningActive) Text(stringResource(R.string.running_locked), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
+                clockSectionItems(
+                    sections = ui.sections,
+                    deleteMode = deleteMode,
+                    selectedIds = selectedIds,
+                    runningActiveId = runningActiveId,
+                    onEdit = { state.openEdit(it) },
+                    onToggle = { toggleSelect(it) },
+                )
                 if (ui.profiles.isEmpty()) {
                     item {
                         Text(
@@ -144,7 +131,7 @@ fun ProfilesScreen(onBack: () -> Unit) {
                     TextButton(onClick = { deleteMode = false; selectedIds = emptySet() }) { Text(stringResource(R.string.cancel)) }
                     TextButton(
                         enabled = selectedIds.isNotEmpty(),
-                        onClick = { confirmDelete = true },
+                        onClick = { requestDelete() },
                         modifier = Modifier.align(Alignment.CenterVertically),
                     ) {
                         Text(stringResource(R.string.delete_selected_n, selectedIds.size), color = MaterialTheme.colorScheme.error)
@@ -156,12 +143,9 @@ fun ProfilesScreen(onBack: () -> Unit) {
 
     ProfileDialogHost(
         vm = vm,
-        editing = editing, onEditChange = { editing = it },
-        creating = creating, onCreateChange = { creating = it },
-        confirmDelete = confirmDelete, onConfirmDeleteChange = { confirmDelete = it },
-        deleteMode = deleteMode, onDeleteModeExit = { deleteMode = false; selectedIds = emptySet() },
+        ui = ui,
+        state = state,
         runningActiveId = runningActiveId,
-        selectedIds = selectedIds,
-        profiles = ui.profiles,
+        onDeleteModeExit = { deleteMode = false; selectedIds = emptySet() },
     )
 }
