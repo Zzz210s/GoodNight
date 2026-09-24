@@ -61,6 +61,17 @@ interface ProfileDao {
     suspend fun archiveById(id: Long)
 
     /**
+     * v2.2 Task 2:导入事务末尾归一化 —— 时钟归属的任务不在库中时归为通用。
+     * 与 [TaskDao.clearDanglingTaskRefs] 同口径:同 id 在另一台设备可能是另一个任务,
+     * 悬挂引用会在之后导入那台设备的备份时被静默重绑。
+     */
+    @Query(
+        "UPDATE profile SET taskId = NULL WHERE taskId IS NOT NULL " +
+            "AND taskId NOT IN (SELECT id FROM task)"
+    )
+    suspend fun clearDanglingTaskRefs()
+
+    /**
      * 原子的「无引用才删」:同一条语句里检查会话段与每日合计,取 rowsAffected(>0 才是真删)。
      * 拆成「先计数再删」会在两步之间漏进新段落,留下悬空 profileId。
      */

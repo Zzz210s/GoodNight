@@ -93,7 +93,7 @@ class DataTransferV2Test {
 
         val json = DataTransfer.exportJson(src)
         val root = JSONObject(json)
-        assertEquals(2, root.getInt("version"))
+        assertEquals(3, root.getInt("version"))
         assertEquals(2, root.getJSONArray("tasks").length())
         assertEquals(active, root.getJSONArray("focusSessions").getJSONObject(0).getLong("taskId"))
         // v2:未绑定的段也写 taskId 键(显式 null),便于外部工具识别 v2 会话结构
@@ -153,8 +153,8 @@ class DataTransferV2Test {
 
     /** 更高版本(本机读不懂的未来格式)安全拒绝:不写任何行,不静默丢数据 */
     @Test fun importRejectsNewerFormatVersion() = runTest {
-        val db = open("v3")
-        val err = runCatching { DataTransfer.importJson(db, V3_JSON) }.exceptionOrNull()
+        val db = open("v4")
+        val err = runCatching { DataTransfer.importJson(db, V4_JSON) }.exceptionOrNull()
         assertTrue("应抛 IllegalArgumentException,实际 $err", err is IllegalArgumentException)
         assertTrue(db.profileDao().getAll().isEmpty())
         assertTrue(db.taskDao().allNow().isEmpty())
@@ -177,7 +177,7 @@ class DataTransferV2Test {
             "tasks":[{"id":100,"title":"外来","done":0,"createdAt":7,"doneAt":null,"sortOrder":3}],
             "focusSessions":[]}"""
 
-        const val V3_JSON = """{"version":3,"exportedAt":1,"profiles":[
+        const val V4_JSON = """{"version":4,"exportedAt":1,"profiles":[
             {"id":1,"name":"未来","workMinutes":25,"restMinutes":5,"createdAt":1,"mode":0}],
             "dailyTotals":[],"tasks":[],"focusSessions":[]}"""
     }

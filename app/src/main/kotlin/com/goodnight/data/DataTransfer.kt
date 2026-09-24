@@ -14,17 +14,22 @@ import org.json.JSONObject
  * 导入时按主键 upsert 合并(配置按 id 覆盖、日累计按 date+profileId 覆盖、段按 id 忽略重复、任务按 id 覆盖)。
  *
  * **格式版本**:v1 = 无 `tasks`、会话无 `taskId`;v2(v2.1 Task 9)= 顶层 `tasks` 数组 +
- * `focusSessions[].taskId`。导入 v1 时任务表为空、全部段为未绑定,账目与旧版逐值等价。
+ * `focusSessions[].taskId`;v3(v2.2 Task 2)= `profiles[]` 增 `taskId`(通用写显式 null)与
+ * `archived`(1/0)。导入 v1/v2 时缺失的这两列按 `taskId = null`、`archived = 0` 处理 ——
+ * 旧备份里的时钟一律成为通用时钟,账目与会话逐值不变。
  * 版本高于 [FORMAT_VERSION] 一律拒绝(抛 IllegalArgumentException):未来格式可能有本版读不懂的
  * 字段,按老规则合并会静默丢数据,宁可让调用方提示"备份文件无效"。
  *
- * **导入后不变量**:事务末尾归一化悬挂引用 —— 段引用的 `taskId` 在任务表里不存在时置为 NULL。
+ * **导入后不变量**:事务末尾归一化 + 去重,顺序不可换 ——
+ * 1. 段引用的 `taskId` 在任务表里不存在时置为 NULL([com.goodnight.data.db.TaskDao.clearDanglingTaskRefs]);
+ * 2. 时钟归属的 `taskId` 同理置为 NULL([com.goodnight.data.db.ProfileDao.clearDanglingTaskRefs]);
+ * 3. 按作用域去重同一批/库内既存的同名活跃时钟([ProfileScopeDedupe],必须在 2 之后)。
  * task id 是"每库自增 + 备份跨设备携带"的命名空间,悬挂 id 会在之后导入另一台设备的备份
  * (同 id 是另一个任务)时被静默重绑,历史段归属被改写且无提示;写库时就清掉可保持
  * "库里不存在悬挂 taskId"(与 [com.goodnight.data.db.TaskDao.clearTaskRefs] 同口径)。
  */
 object DataTransfer {
-    const val FORMAT_VERSION = 2
+    const val FORMAT_VERSION = 3
 
     /** 导出全部数据为 JSON 字符串 */
     suspend fun exportJson(db: GoodNightDatabase): String {
@@ -44,7 +49,10 @@ object DataTransfer {
             .put("workMinutes", p.workMinutes)
             .put("restMinutes", p.restMinutes)
             .put("createdAt", p.createdAt)
-            .put("mode", p.mode))
+            .put("mode", p.mode)
+            // v3:归属任务(未绑定写显式 null,键恒在)与归档标记(1/0,与 task.done 同形)
+            .put("taskId", p.taskId ?: JSONObject.NULL)
+            .put("archived", if (p.archived) 1 else 0))
         }
         root.put("profiles", pArr)
 
@@ -109,6 +117,9 @@ object DataTransfer {
                 restMinutes = o.optInt("restMinutes", 5),
                 createdAt = o.optLong("createdAt", 0),
                 mode = o.optInt("mode", 0),
+                // v1/v2 无这两键:时钟一律成为通用、视为未归档
+                taskId = if (o.isNull("taskId")) null else o.optLong("taskId"),
+                archived = o.optInt("archived", 0) != 0,
             ))
         }
         val totalRows = ArrayList<DailyTotalEntity>(totals.length())
@@ -154,8 +165,11 @@ object DataTransfer {
             db.profileDao().upsertAll(profileRows)
             db.dailyTotalDao().upsertAll(totalRows)
             db.focusSessionDao().insertAllIgnore(sessionRows)
-            // 末尾归一化:备份引用的任务不在库中(或本段与任务都来自不同设备)时置为未绑定
+            // 末尾归一化:备份引用的任务不在库中(或本批与任务都来自不同设备)时置为未绑定
             db.taskDao().clearDanglingTaskRefs()
+            db.profileDao().clearDanglingTaskRefs()
+            // 归一化之后再去重:归为通用的时钟可能与目标作用域的既有同级时钟同名(见 ProfileScopeDedupe)
+            ProfileScopeDedupe.apply(db, profileRows)
         }
         return ImportCounts(profiles.length(), totals.length(), sessions.length(), tasks.length())
     }

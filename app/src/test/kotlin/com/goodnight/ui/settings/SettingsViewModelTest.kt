@@ -111,8 +111,8 @@ class SettingsViewModelTest {
         assertEquals("写周报", g.taskRepo.titleById(1L))
         assertEquals(1L, g.db.focusSessionDao().getAll().single().taskId)
 
-        val v3 = """{"version":3,"exportedAt":1,"profiles":[],"dailyTotals":[],"tasks":[],"focusSessions":[]}"""
-        val future = java.io.File(ctx.cacheDir, "restore-v3.json").apply { writeText(v3) }
+        val v4 = """{"version":4,"exportedAt":1,"profiles":[],"dailyTotals":[],"tasks":[],"focusSessions":[]}"""
+        val future = java.io.File(ctx.cacheDir, "restore-v4.json").apply { writeText(v4) }
         assertNull(vm.restoreFrom(android.net.Uri.fromFile(future)))
         assertEquals("写周报", g.taskRepo.titleById(1L)) // 库未被未来版本文件改动
     }
