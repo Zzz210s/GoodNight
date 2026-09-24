@@ -76,9 +76,14 @@ class ProfileRepository(
      * v2.2:删时钟。有会话段或每日合计引用 → 归档(行保留,历史仍可解析其名);无引用 → 真删。
      * 「无引用才删」是**一条原子 SQL**([ProfileDao.deleteIfUnreferenced]):先计数再删的话,
      * 两步之间落下的段落会让这次删除留下悬空 profileId。归档方向保守(最坏多留一行归档)。
+     *
+     * rowsAffected = 0 有两种原因:有引用,**或行根本不存在**(未知 id / 并发双删)。归档前必须
+     * 区分二者(判存在放在原子删除**之后**:放在之前的话,两个并发调用会双双判「存在」,
+     * 后到的那个仍会返回 Archived),否则会对着已不存在的行谎称「已归档,历史保留」。
      */
     suspend fun removeOrArchive(id: Long): ProfileRemoval {
         if (dao.deleteIfUnreferenced(id) > 0) return ProfileRemoval.Deleted
+        if (dao.byId(id) == null) return ProfileRemoval.Deleted
         dao.archiveById(id)
         return ProfileRemoval.Archived
     }

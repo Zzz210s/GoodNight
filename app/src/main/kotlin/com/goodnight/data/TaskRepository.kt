@@ -64,11 +64,14 @@ class TaskRepository(private val db: GoodNightDatabase) {
      *
      * 转通用时**按数字后缀去重**:通用层可能已有同名时钟(如通用「专注」+ A 专属「专注」),
      * 直接解绑会造出两个同名通用时钟,破坏作用域内唯一,也让 byNameInScope 的 LIMIT 1 失去意义。
+     *
+     * 去重只作用于**活跃**时钟:归档行不占名字(byNameInScope 排除归档),给它加后缀纯属副作用,
+     * 还会让历史/日报里按 id 解析出的旧名字静默漂移,所以归档行保持原名直接转通用。
      */
     suspend fun deleteTask(id: Long) = db.withTransaction {
         dao.clearTaskRefs(id)
         profileDao.getByTask(id).forEach { p ->
-            profileDao.freeToGeneric(p.id, uniqueGenericName(p))
+            profileDao.freeToGeneric(p.id, if (p.archived) p.name else uniqueGenericName(p))
         }
         dao.deleteById(id)
     }
