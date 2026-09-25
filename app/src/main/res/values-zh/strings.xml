@@ -165,7 +165,9 @@
     <string name="task_title_blank">名称不能为空</string>
     <string name="task_title_too_long">名称过长(最多 %1$d 字)</string>
     <string name="task_delete_confirm">将删除任务,已记录的 %1$d 分钟会保留为未绑定</string>
-    <string name="task_delete_confirm_clocks">将删除任务,已记录的 %1$d 分钟会保留为未绑定;它的 %2$d 个专属时钟会转为通用时钟</string>
+    <plurals name="task_delete_confirm_clocks">
+        <item quantity="other">将删除任务,已记录的 %1$d 分钟会保留为未绑定;它的 %2$d 个专属时钟会转为通用时钟</item>
+    </plurals>
     <string name="task_delete">删除任务</string>
     <string name="task_drag">长按拖动排序</string>
     <string name="task_done_at">完成于 %1$s</string>

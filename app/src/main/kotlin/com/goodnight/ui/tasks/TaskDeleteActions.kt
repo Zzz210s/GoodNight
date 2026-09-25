@@ -1,5 +1,6 @@
 package com.goodnight.ui.tasks
 
+import android.content.Context
 import androidx.lifecycle.viewModelScope
 import com.goodnight.R
 import kotlinx.coroutines.launch
@@ -12,11 +13,19 @@ import kotlinx.coroutines.launch
 data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long, val clocks: Int)
 
 /**
- * 确认框正文资源:只有真有时钟会被转成通用时才追加那句(v2.2 Task 7)。
+ * 确认框正文(v2.2 Task 7):只有真有时钟会被转成通用时才追加那句。
  * 抽成函数是为了让「有/无专属时钟」两条分支都能被单测钉住(TaskDialogs 本身是 Compose 树)。
+ * 时钟数走 [R.plurals.task_delete_confirm_clocks](英文单数「1 dedicated clock」需要 one 形态),
+ * 分钟仍是 %d 直出。
  */
-internal fun deleteConfirmTextRes(clocks: Int): Int =
-    if (clocks > 0) R.string.task_delete_confirm_clocks else R.string.task_delete_confirm
+internal fun deleteConfirmText(ctx: Context, p: TaskDeletePrompt): CharSequence =
+    if (p.clocks > 0) {
+        ctx.resources.getQuantityString(
+            R.plurals.task_delete_confirm_clocks, p.clocks, p.minutes, p.clocks,
+        )
+    } else {
+        ctx.getString(R.string.task_delete_confirm, p.minutes)
+    }
 
 /**
  * v2.1 Task 6 / v2.2 Task 4:任务删除与「已记录的 N 分钟」口径。
@@ -53,7 +62,7 @@ internal fun TaskListViewModel.onDelete(id: Long) {
     viewModelScope.launch {
         if (graph.engine.snapshot.value?.taskId == id) graph.engine.setTask(null)
         graph.taskRepo.deleteTask(id)
-        graph.coordinator.notifier.refreshTaskTitle()
+        graph.coordinator.notifier.refreshNames()
     }
 }
 

@@ -3,7 +3,6 @@ package com.goodnight.ui.tasks
 import android.content.Context
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
-import com.goodnight.R
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
 import kotlinx.coroutines.flow.first
@@ -54,10 +53,10 @@ class TaskDeleteClockNoteTest {
         v.onDeleteRequest(id); pump()
         val prompt = v.deletePrompt.value!!
         assertEquals(1, prompt.clocks)
-        assertEquals(R.string.task_delete_confirm_clocks, deleteConfirmTextRes(prompt.clocks))
+        // 时钟数走 plurals:zh 只有 other 形态,文案与 v2.2 逐字相同
         assertEquals(
             "将删除任务,已记录的 0 分钟会保留为未绑定;它的 1 个专属时钟会转为通用时钟",
-            ctx.getString(deleteConfirmTextRes(prompt.clocks), prompt.minutes, prompt.clocks),
+            deleteConfirmText(ctx, prompt).toString(),
         )
     }
 
@@ -70,10 +69,9 @@ class TaskDeleteClockNoteTest {
         v.onDeleteRequest(id); pump()
         val prompt = v.deletePrompt.value!!
         assertEquals(0, prompt.clocks)
-        assertEquals(R.string.task_delete_confirm, deleteConfirmTextRes(prompt.clocks))
         assertEquals(
             "将删除任务,已记录的 0 分钟会保留为未绑定",
-            ctx.getString(deleteConfirmTextRes(prompt.clocks), prompt.minutes, prompt.clocks),
+            deleteConfirmText(ctx, prompt).toString(),
         )
     }
 

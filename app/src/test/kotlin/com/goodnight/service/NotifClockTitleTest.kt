@@ -5,11 +5,15 @@ import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import com.goodnight.data.db.ProfileMode
 import com.goodnight.di.AppGraph
+import com.goodnight.timer.EngineStatus
+import com.goodnight.ui.settings.SettingsViewModel
+import com.goodnight.ui.settings.commitScopeAndName
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,6 +50,16 @@ class NotifClockTitleTest {
     private fun postedTitle(): String? =
         shadowOf(nm()).getNotification(TimerNotifications.ID_NOTIFY)
             ?.extras?.getCharSequence(NotificationCompat.EXTRA_TITLE)?.toString()
+
+    /** 刷新在 appScope(Dispatchers.Default)上派发,非同步:轮询等标题变成 [want](同 ServiceNotifierTest) */
+    private fun awaitTitle(want: String, timeoutMs: Long = 5_000): String? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (postedTitle() == want) return want
+            Thread.sleep(25)
+        }
+        return postedTitle()
+    }
 
     // ---- 拼装规则(纯函数) ----
 
@@ -116,6 +130,43 @@ class NotifClockTitleTest {
         val fresh = titles.resolve(snap, refresh = true)
         assertEquals("写月报", fresh.task)
         assertEquals("番茄2", fresh.clock)
+    }
+
+    /**
+     * 绑任务 + **通用**时钟:时钟归属与快照任务无关,标题仍按「任务 · 时钟」拼
+     *(通用时钟是 v2.2 的默认形态,这条组合最容易在改动里漏掉)。
+     */
+    @Test fun postJoinsTaskAndGenericClock() = runBlocking {
+        val taskId = g.taskRepo.create("写周报", now = 1L)!!
+        val clockId = g.profileRepo.create("睡眠", 45, 15, ProfileMode.COUNTDOWN, null)!!
+        val snap = snapOf().copy(profileId = clockId, taskId = taskId)
+        g.engine.restore(snap)
+        val notifier = g.coordinator.notifier
+        TimerNotifications.ensureChannels(ctx)
+
+        notifier.post(snap, notifier.titleFor(snap), notifier.clockFor(snap))
+        assertEquals("工作中 · 写周报 · 睡眠", postedTitle())
+    }
+
+    /**
+     * v2.2 Task 7(复审修复 Important):**暂停中**在管理页改运行中时钟的名字,通知标题要同步更新。
+     * 缓存 [NotifTitles] 按 (taskId, profileId) 身份记 —— 改名不动身份,漏了刷新的话每次重发
+     *(阶段切换/到期钳制/前台化)都命中缓存分支,通知永远显示旧时钟名。
+     * 暂停是可达路径:ProfilesScreen 只在 RUNNING 时置 runningActiveId,暂停中卡片可点。
+     */
+    @Test fun renamingPausedClockViaSettingsPageRefreshesNotification() = runBlocking {
+        val clockId = g.profileRepo.create("番茄", 25, 5, ProfileMode.COUNTDOWN, null)!!
+        val snap = snapOf(status = EngineStatus.PAUSED).copy(profileId = clockId)
+        g.engine.restore(snap)
+        val notifier = g.coordinator.notifier
+        TimerNotifications.ensureChannels(ctx)
+        notifier.post(snap, notifier.titleFor(snap), notifier.clockFor(snap)) // 首次发布:缓存旧名
+        assertEquals("工作中 · 番茄", postedTitle())
+
+        val renamed = SettingsViewModel(g).commitScopeAndName(g.profileRepo.byId(clockId)!!, null, "深度工作")
+        assertTrue("改名应当成功", renamed)
+
+        assertEquals("工作中 · 深度工作", awaitTitle("工作中 · 深度工作"))
     }
 
     /** 不带名字的重发(到期钳制、前台化重发)必须从缓存拿回两段名字,不得退回「工作中」 */

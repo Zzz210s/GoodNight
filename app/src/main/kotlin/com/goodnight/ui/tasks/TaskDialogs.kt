@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,16 +67,15 @@ internal fun TaskInputDialog(
 
 /**
  * 删除确认:标题即被删任务名(用户要知道删的是哪个),文案含该任务已记录的分钟数(时间账保留为未绑定);
- * v2.2 Task 7:该任务有专属时钟时追加一句「会转为通用时钟」([deleteConfirmTextRes] 按数量选资源)。
+ * v2.2 Task 7:该任务有专属时钟时追加一句「会转为通用时钟」([deleteConfirmText] 按数量选资源/plural 形态)。
  */
 @Composable
 internal fun TaskDeleteDialog(prompt: TaskDeletePrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(prompt.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        text = {
-            Text(stringResource(deleteConfirmTextRes(prompt.clocks), prompt.minutes, prompt.clocks))
-        },
+        text = { Text(deleteConfirmText(ctx, prompt).toString()) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)

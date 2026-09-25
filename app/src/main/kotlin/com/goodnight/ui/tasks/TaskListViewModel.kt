@@ -147,7 +147,7 @@ class TaskListViewModel(internal val graph: AppGraph) : ViewModel() {
             }
             _inputError.value = null
             graph.taskRepo.rename(id, title)
-            graph.coordinator.notifier.refreshTaskTitle() // 通知里的任务名跟着改(缓存按 taskId 记)
+            graph.coordinator.notifier.refreshNames() // 通知里的任务名跟着改(缓存按身份记)
         }
     }
 

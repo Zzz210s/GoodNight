@@ -20,10 +20,18 @@ import kotlinx.coroutines.withContext
  * v2.2 Task 5(复审修复 W2):编辑提交 = 改归属 + 改名,由仓库层按**最终状态**一条带条件的
  * UPDATE 写入。目标作用域已有同名活跃时钟时返回 false 且一行不动 —— 不再有「已换归属、名字未改」
  * 的中间态。
+ *
+ * v2.2 Task 7(复审修复):改名成功后必须让通知标题缓存失效。缓存 [com.goodnight.service.NotifTitles]
+ * 按 (taskId, profileId) 身份记,改名不动身份 —— 暂停中的运行时钟卡片**可点**(ProfilesScreen 只在
+ * RUNNING 时置 runningActiveId),在这里改名后每次重发(阶段切换 / 到期钳制 / 前台化)都会命中缓存
+ * 分支,通知长期显示旧时钟名。有快照才需要刷(空闲常驻通知本就不带名字)。
  * @return false = 目标作用域的最终名字已被占用(调用方提示「该归属下已有同名时钟」)
  */
-suspend fun SettingsViewModel.commitScopeAndName(p: ProfileEntity, taskId: Long?, name: String): Boolean =
-    graph.profileRepo.moveAndRename(p.id, taskId, name)
+suspend fun SettingsViewModel.commitScopeAndName(p: ProfileEntity, taskId: Long?, name: String): Boolean {
+    if (!graph.profileRepo.moveAndRename(p.id, taskId, name)) return false
+    if (graph.engine.snapshot.value != null) graph.coordinator.notifier.refreshNames()
+    return true
+}
 
 /**
  * 单个时钟的删除:判定 → 归档或真删。判定在**写库这一刻重做**(不信任对话框时刻的计划):

@@ -69,7 +69,10 @@ class EngineCoordinator(internal val graph: AppGraph) {
                     .collect { dispatch(it) }
             }
             launch {
-                graph.engine.snapshot.collect { if (!serviceAttached) notifier.post(it, notifier.titleFor(it)) }
+                graph.engine.snapshot.collect {
+                    // 两段名字都显式传:与 TimerService 对齐,不靠 NotifTitles 缓存的副作用兜底
+                    if (!serviceAttached) notifier.post(it, notifier.titleFor(it), notifier.clockFor(it))
+                }
             }
         }
     }
@@ -138,7 +141,7 @@ class EngineCoordinator(internal val graph: AppGraph) {
                 }
             }
         }
-        if (postSnap != null) notifier.post(postSnap, notifier.titleFor(postSnap))
+        if (postSnap != null) notifier.post(postSnap, notifier.titleFor(postSnap), notifier.clockFor(postSnap))
     }
 
     /** 执行命令(服务 onStartCommand 与测试共用) */

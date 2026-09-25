@@ -36,5 +36,16 @@ class EnResourcesTest {
             ctx.getString(R.string.clock_switch_confirm),
         )
         assertEquals("Shared clocks", ctx.getString(R.string.clock_group_generic))
+        // v2.2 Task 7:删任务确认框的时钟数走 plurals(英文单数不成立的那句)
+        assertEquals(
+            "Delete this task? Its 30 recorded minutes stay as unbound; " +
+                "its 1 dedicated clock becomes a generic clock",
+            ctx.resources.getQuantityString(R.plurals.task_delete_confirm_clocks, 1, 30, 1),
+        )
+        assertEquals(
+            "Delete this task? Its 30 recorded minutes stay as unbound; " +
+                "its 2 dedicated clocks become generic clocks",
+            ctx.resources.getQuantityString(R.plurals.task_delete_confirm_clocks, 2, 30, 2),
+        )
     }
 }

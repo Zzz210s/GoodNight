@@ -53,12 +53,15 @@ class ServiceNotifier(
     suspend fun clockFor(snap: RuntimeSnapshot?): String? = titles.resolve(snap).clock
 
     /**
-     * v2.1 Task 6:任务改名/删除后重解析标题并重发通知。
-     * [NotifTitles] 的缓存按 (taskId, profileId) 记,不主动失效的话钳制重发会把旧名写回,
-     * 所以这里用 refresh 强制重查并把这组名字**显式**交给 post(启动协程后快照可能已变,
-     * 不能指望 post 自己去读缓存)。无快照时无事可做(空闲通知本就不带名字)。
+     * v2.1 Task 6 / v2.2 Task 7:任务或时钟改名/删除后重解析两段名字并重发通知。
+     * [NotifTitles] 的缓存按 (taskId, profileId) 记 —— 键是**身份**不是名字,不主动失效的话
+     * 钳制重发会把旧名写回,所以这里用 refresh 强制重查并把这组名字**显式**交给 post
+     * (启动协程后快照可能已变,不能指望 post 自己去读缓存)。
+     * 任务页改名走 [com.goodnight.ui.tasks.TaskListViewModel],时钟管理页改名走
+     * [com.goodnight.ui.settings.commitScopeAndName] —— 两处都必须调本函数。
+     * 无快照时无事可做(空闲通知本就不带名字)。
      */
-    fun refreshTaskTitle() {
+    fun refreshNames() {
         val snap = graph.engine.snapshot.value ?: return
         scope.launch {
             val names = titles.resolve(snap, refresh = true)
