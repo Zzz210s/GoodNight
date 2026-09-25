@@ -161,7 +161,7 @@ fun ReportScreen(onBack: () -> Unit, initialRange: ReportRange = ReportRange.WEE
             // v2.1 Task 8:按任务分解(追加在既有结构之后;时钟累计页签为空,窗口内无段也不渲染)
             if (ui.taskSlices.isNotEmpty()) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                TaskBreakdownSection(ui.taskSlices)
+                TaskBreakdownSection(ui.taskSlices, resetKey = ui.range to ui.anchor)
             }
         }
     }

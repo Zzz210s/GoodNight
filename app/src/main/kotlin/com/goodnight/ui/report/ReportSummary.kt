@@ -117,7 +117,7 @@ fun FocusBarRow(
             val anim = rememberAnimationsEnabled()
             // 条形从 0 -> 目标弹性生长(系统关闭动画时直切);重放时随数据/目标变化自然重绘
             val fraction by animateFloatAsState(
-                targetValue = if (anim) target else target,
+                targetValue = target,
                 animationSpec = if (anim) BarAnim else tween(0),
                 label = "barFraction",
             )

@@ -56,18 +56,19 @@ fun taskBreakdownUi(slices: List<TaskSlice>): List<TaskSliceUi> {
 }
 
 /**
- * 「按任务」区块:视觉沿用既有报表条形行(标签 — 比例条 — 时长/次数/占比),
+ * 「按任务」区块:视觉沿用既有报表条形行(标签 — 比例条 — 时长/次数/占比 — 展开箭头),
  * 条形以本区最长任务为满格。空列表不渲染(无段时界面无此块)。
  *
  * v2.2 Task 6:有[TaskSliceUi.clocks]的行可点开,行下追加该任务的时钟子行(时长/次数/占比)。
  * 展开状态只活在**界面本地**(键 = taskId,未绑定用 [UNBOUND_KEY]),不进 VM、不参与聚合:
- * 行级合计口径与 2.1 逐字一致,展开与否不影响任何数值。
+ * 行级合计口径与 2.1 逐字一致,展开与否不影响任何数值。[resetKey] 变(切页签/切期)则清空展开,
+ * 避免上一个窗口的展开状态跑到新窗口的同 id 任务上。
  */
 @Composable
-fun TaskBreakdownSection(slices: List<TaskSliceUi>) {
+fun TaskBreakdownSection(slices: List<TaskSliceUi>, resetKey: Any? = null) {
     if (slices.isEmpty()) return
     val max = slices.maxOf { it.millis }.coerceAtLeast(1L)
-    val expanded = remember { mutableStateMapOf<Long, Boolean>() }
+    val expanded = remember(resetKey) { mutableStateMapOf<Long, Boolean>() }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.report_by_task), style = MaterialTheme.typography.titleSmall)
         slices.forEach { s ->
@@ -81,7 +82,8 @@ fun TaskBreakdownSection(slices: List<TaskSliceUi>) {
                 max = max,
                 expandable = s.clocks.isNotEmpty(),
                 expanded = open,
-                onToggle = { expanded[key] = !open },
+                // 以点击瞬间的状态取反:同帧连击不会因为 held 的旧值只切一次
+                onToggle = { expanded[key] = expanded[key] != true },
             )
             if (open) {
                 s.clocks.forEach { c ->

@@ -26,6 +26,8 @@ class EnResourcesTest {
         // v2.1 Task 8:报表「按任务」区块
         assertEquals("By task", ctx.getString(R.string.report_by_task))
         assertEquals("3 sessions · 45%", ctx.getString(R.string.report_task_meta, 3, 45))
+        // v2.2 Task 6/7:时钟子行是「任务内」口径,与父行全窗口口径分开(zh 对照在 TaskBreakdownSectionTest)
+        assertEquals("3 sessions · 45% of task", ctx.getString(R.string.report_clock_meta, 3, 45))
         // v2.2 Task 4:计时卡「任务 · 时钟」与换时钟确认(zh 对照在 ClockSwitchTest)
         assertEquals("%1\$s · %2\$s", ctx.getString(R.string.timer_chip_pair))
         assertEquals("Switch clock", ctx.getString(R.string.clock_switch_title))

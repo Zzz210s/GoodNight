@@ -118,6 +118,7 @@
     <!-- report clock detail (v2.2) -->
     <string name="report_clock_unknown">未知时钟</string>
     <string name="report_clock_details">时钟明细</string>
+    <string name="report_clock_meta">%1$d 次 · 任务内 %2$d%%</string>
     <string name="color_theme">配色</string>
     <string name="pack_ember">经典橙</string>
     <string name="pack_green">浅绿</string>
