@@ -44,6 +44,7 @@ The core problem of pomodoro-style apps is background reliability: lock screen, 
 - Gentle crossfade-only screen transitions; focus segments shorter than one minute are treated as mis-touches (never counted, stored or shown; historical ones are purged once on upgrade); the lifetime report tab is renamed 总时长/Total and shows the same health summary as weekly/monthly.
 - Equal-duration cross-fade screen transitions (no white-frame gaps); redesigned Weekly/Monthly/总报 reports with a hero summary card, metric tiles, time-of-day distribution bars and per-day/per-clock proportional bar visualization.
 - Report time-of-day labels are name-only (Morning/Afternoon/Evening/Night); seven color theme packs (Ember, Light green, Blue, Purple, Rose, Teal, Nord) switchable in Settings, persisted, light-only.
+- Clocks are grouped by task: a shared section plus one section per task that owns clocks, and a clock created from a task card lands in that task's section. Tapping a clock chip on a task card starts the timer already bound to that task, the timer card reads "task · clock", and switching the clock mid-run asks for confirmation first. Deleting a clock that has history archives it instead (its name and time stay in reports and the daily detail); deleting a task returns its clocks to the shared section. Backups move to format v3 (v1/v2 files still import).
 
 ## Install
 

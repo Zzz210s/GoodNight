@@ -16,8 +16,8 @@ android {
         applicationId = "com.goodnight"
         minSdk = 26
         targetSdk = 35
-        versionCode = 67
-        versionName = "2.1.0"
+        versionCode = 68
+        versionName = "2.2.0"
     }
     val keystoreProps = rootProject.file("local.properties").let { f ->
         if (f.exists()) Properties().apply { f.inputStream().use { load(it) } } else null
