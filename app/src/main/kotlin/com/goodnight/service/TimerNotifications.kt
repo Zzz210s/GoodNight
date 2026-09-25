@@ -49,12 +49,9 @@ object TimerNotifications {
         )
     }
 
-    /**
-     * v2.1:计时通知标题 —— 绑定任务时拼上任务名(「工作中 · 写周报」);
-     * 未绑定 / 标题查不到 / 纯空白时维持原相位文案。
-     */
-    fun workTitle(phaseText: String, taskTitle: String?): String =
-        if (taskTitle.isNullOrBlank()) phaseText else "$phaseText · $taskTitle"
+    /** 计时通知标题:v2.1 起拼任务名,v2.2 Task 7 起再拼时钟名(拼装规则见 [notifTitle]) */
+    fun workTitle(phaseText: String, taskTitle: String?, clockName: String? = null): String =
+        notifTitle(phaseText, taskTitle, clockName)
 
     /** 引擎快照未就绪的最小占位通知:onStartCommand 同步前台化先顶上 */
     /** 有快照用计时通知,无快照用最小通知(服务同步前台化用) */
@@ -72,11 +69,16 @@ object TimerNotifications {
             .setContentIntent(activityIntent(context))
             .build()
 
-    /** 计时态通知(RemoteViews:相位图标 + 倒计时/定格 + 循环 + 图标按钮);[taskTitle] 非空时标题带任务名 */
-    fun inProgress(context: Context, snap: RuntimeSnapshot, taskTitle: String? = null): Notification {
+    /** 计时态通知(RemoteViews:相位图标 + 倒计时/定格 + 循环 + 图标按钮);
+     *  [taskTitle]/[clockName] 非空时标题分别带上任务名、时钟名(v2.2 Task 7) */
+    fun inProgress(
+        context: Context, snap: RuntimeSnapshot,
+        taskTitle: String? = null, clockName: String? = null,
+    ): Notification {
         val phaseText = workTitle(
             context.getString(if (snap.phase == Phase.WORK) R.string.state_work else R.string.state_rest),
             taskTitle,
+            clockName,
         )
         val paused = snap.status == EngineStatus.PAUSED
         val countUp = snap.countUp
