@@ -95,10 +95,10 @@ class ServiceNotifierTest {
     }
 
     /**
-     * v2.1 Task 6(Task 5 遗留 minor):改名后标题缓存不失效 —— 缓存按 taskId 记,旧名会粘住,
-     * 钳制重发(不带标题)会把旧名重新写回通知。[refreshTaskTitle] 必须重解析并立即重发。
+     * v2.1 Task 6(Task 5 遗留 minor)/ v2.2 Task 7:改名后标题缓存不失效 —— 缓存按身份记,旧名会粘住,
+     * 钳制重发(不带标题)会把旧名重新写回通知。[refreshNames] 必须重解析并立即重发。
      */
-    @Test fun refreshTaskTitlePicksUpRename() = runBlocking {
+    @Test fun refreshNamesPicksUpTaskRename() = runBlocking {
         val a = graph.taskRepo.create("写周报", now = 1L)!!
         val notifier = graph.coordinator.notifier
         TimerNotifications.ensureChannels(ctx)
@@ -108,7 +108,7 @@ class ServiceNotifierTest {
         assertEquals("工作中 · 写周报", postedTitle())
 
         graph.taskRepo.rename(a, "写月报")
-        notifier.refreshTaskTitle()
+        notifier.refreshNames()
 
         assertEquals("工作中 · 写月报", awaitTitle("工作中 · 写月报"))
     }

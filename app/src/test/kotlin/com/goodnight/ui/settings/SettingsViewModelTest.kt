@@ -2,6 +2,7 @@ package com.goodnight.ui.settings
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.goodnight.data.ProfileRemoval
 import com.goodnight.data.ReminderIntensity
 import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.ProfileMode
@@ -37,10 +38,10 @@ class SettingsViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "sv1")
         g.bootstrap()
         val vm = SettingsViewModel(g)
-        val id = vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)
+        val id = vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)!!
         assertTrue(id > 0)
-        assertEquals(-1L, vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN)) // 重名拒绝
-        vm.renameProfile(id, "深度专注")
+        assertNull("重名拒绝", vm.createProfile("深度", 50, 10, ProfileMode.COUNTDOWN))
+        g.profileRepo.rename(id, "深度专注")
         vm.editDurations(ProfileEntity(id, "x", 1, 1, 0), 45, 15, ProfileMode.COUNTDOWN)
         assertEquals(45, g.profileRepo.byId(id)!!.workMinutes)
         assertEquals("深度专注", g.profileRepo.byId(id)!!.name)
@@ -53,7 +54,7 @@ class SettingsViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "sv_mode")
         g.bootstrap()
         val vm = SettingsViewModel(g)
-        val id = vm.createProfile("正计时", 45, 10, ProfileMode.COUNTUP)
+        val id = vm.createProfile("正计时", 45, 10, ProfileMode.COUNTUP)!!
         assertTrue(id > 0)
         assertEquals(ProfileMode.COUNTUP, g.profileRepo.byId(id)!!.mode)
         assertEquals(ProfileMode.COUNTUP, g.profileRepo.modeOf(id)) // modeOf 同源
@@ -71,7 +72,7 @@ class SettingsViewModelTest {
         g.bootstrap()
         val vm = SettingsViewModel(g)
         // #3 首装空库:自建一行后才谈得上改时长策略
-        val id = vm.createProfile("专注", 25, 5, ProfileMode.COUNTDOWN)
+        val id = vm.createProfile("专注", 25, 5, ProfileMode.COUNTDOWN)!!
         g.engine.restore(snap(EngineStatus.RUNNING, profileId = id))
         assertFalse(vm.editDurations(ProfileEntity(id, "a", 1, 1, 0), 30, 10, ProfileMode.COUNTDOWN)) // RUNNING 拒
         assertEquals(25, g.profileRepo.byId(id)!!.workMinutes) // IGNORED 不写(建时 25 保持)
@@ -84,14 +85,17 @@ class SettingsViewModelTest {
         val g = AppGraph(ctx, useInMemoryDb = true, storeFileName = "sv3")
         g.bootstrap()
         val vm = SettingsViewModel(g)
-        // #3 首装空库:先自建“最后一条”,拒删语义不变
+        // #3 首装空库:先自建“最后一条”,拒删语义不变(归档同样让活跃列表清零)
         vm.createProfile("A", 25, 5, ProfileMode.COUNTDOWN)
         val only = g.profileRepo.profiles.first().first()
-        assertFalse(vm.deleteProfile(only)) // 最后一条拒删
+        assertNull("最后一条拒删", vm.deleteProfile(only))
         vm.createProfile("B", 50, 10, ProfileMode.COUNTDOWN)
         g.engine.restore(snap(EngineStatus.PAUSED, profileId = only.id))
-        assertTrue(vm.deleteProfile(only)) // 暂停中的活跃配置:先 reset 再删
-        assertEquals(1, g.profileRepo.profiles.first().size)
+        // v2.2 Task 5 复审修复:暂停中正在用的时钟 → 归档(不停机、不真删)
+        assertEquals(ProfileRemoval.Archived, vm.deleteProfile(only))
+        assertTrue("行保留且归档", g.profileRepo.byId(only.id)!!.archived)
+        assertEquals("活跃时钟只剩另一个", 1, g.profileRepo.countActive())
+        assertEquals("计时继续", only.id, g.engine.snapshot.value?.profileId)
     }
 
     /**
@@ -111,8 +115,8 @@ class SettingsViewModelTest {
         assertEquals("写周报", g.taskRepo.titleById(1L))
         assertEquals(1L, g.db.focusSessionDao().getAll().single().taskId)
 
-        val v3 = """{"version":3,"exportedAt":1,"profiles":[],"dailyTotals":[],"tasks":[],"focusSessions":[]}"""
-        val future = java.io.File(ctx.cacheDir, "restore-v3.json").apply { writeText(v3) }
+        val v4 = """{"version":4,"exportedAt":1,"profiles":[],"dailyTotals":[],"tasks":[],"focusSessions":[]}"""
+        val future = java.io.File(ctx.cacheDir, "restore-v4.json").apply { writeText(v4) }
         assertNull(vm.restoreFrom(android.net.Uri.fromFile(future)))
         assertEquals("写周报", g.taskRepo.titleById(1L)) // 库未被未来版本文件改动
     }

@@ -54,8 +54,14 @@ object TimerNotifIdle {
         app.graph.appScope.launch {
             // v1.11.0 启动优化:渠道创建是 binder 调用,放到协程里,不占 Application.onCreate 主线程
             TimerNotifications.ensureChannels(context)
+            // v2.2 Task 5 复审修复:通知只能挂**活跃**时钟。归档行仍在库里(历史解析要用它的名字),
+            // 但已从列表与首页下架;拿它当通知主体 → 通知栏显示已下架时钟且保留可点的「启动」,
+            // 按下去就是启动一个已归档时钟(v2.2 前这里是真删、按钮 GONE,故为归档引入的回退)。
+            // 选中项已归档时回退到第一个活跃时钟 —— 与 HomeViewModel 的选中口径一致;
+            // 一个活跃时钟都没有时 profile = null(idle 把启动按钮置 GONE)。
             val pid = app.graph.settingsRepo.activeProfileId.first()
-            val profile = if (pid != -1L) app.graph.profileRepo.byId(pid) else null
+            val active = app.graph.profileRepo.observeAllActive().first()
+            val profile = active.firstOrNull { it.id == pid } ?: active.firstOrNull()
             try {
                 context.getSystemService(NotificationManager::class.java)?.notify(TimerNotifications.ID_NOTIFY, idle(context, profile))
             } catch (_: Throwable) {

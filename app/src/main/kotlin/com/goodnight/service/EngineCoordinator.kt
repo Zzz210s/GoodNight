@@ -35,7 +35,7 @@ data class TimerCommand(
  *
  * 服务只保留前台化/ticker/生命周期;所有引擎驱动经同一把 [mutex] 串行。
  */
-class EngineCoordinator(private val graph: AppGraph) {
+class EngineCoordinator(internal val graph: AppGraph) {
     private val scope = graph.appScope
     private val context = graph.appContext
     val notifier = ServiceNotifier(context, graph, scope)
@@ -69,7 +69,10 @@ class EngineCoordinator(private val graph: AppGraph) {
                     .collect { dispatch(it) }
             }
             launch {
-                graph.engine.snapshot.collect { if (!serviceAttached) notifier.post(it, notifier.titleFor(it)) }
+                graph.engine.snapshot.collect {
+                    // 两段名字都显式传:与 TimerService 对齐,不靠 NotifTitles 缓存的副作用兜底
+                    if (!serviceAttached) notifier.post(it, notifier.titleFor(it), notifier.clockFor(it))
+                }
             }
         }
     }
@@ -138,14 +141,25 @@ class EngineCoordinator(private val graph: AppGraph) {
                 }
             }
         }
-        if (postSnap != null) notifier.post(postSnap, notifier.titleFor(postSnap))
+        if (postSnap != null) notifier.post(postSnap, notifier.titleFor(postSnap), notifier.clockFor(postSnap))
     }
 
     /** 执行命令(服务 onStartCommand 与测试共用) */
     suspend fun run(cmd: TimerCommand) = mutex.withLock {
         com.goodnight.diag.DiagLog.add("Eng", "命令 ${cmd.action.substringAfterLast('.')}")
         when (cmd.action) {
-            ACTION_START -> graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
+            ACTION_START -> {
+                // v2.2 Task 3:START 自带任务 id 时在同一把锁内立刻绑定(首次绑定 = 定义整段,
+                // 不产生段内切点);分两条命令下发会有顺序竞态,空闲态丢绑定。
+                // 但只在**真的会启动**时才绑定:engine.start 非 IDLE 时是 no-op,若照样 setTask
+                // 就会给正在运行的那一段静默改归属(段内生成 task 切点)—— 点 chip 与首页/通知的
+                // 启动 Intent 竞态到达时,用户看到的运行时钟不是自己点的那个。
+                val wasIdle = graph.engine.snapshot.value?.let { it.status == EngineStatus.IDLE } ?: true
+                graph.engine.start(cmd.profileId, cmd.workMillis, cmd.restMillis, cmd.countUp)
+                if (wasIdle && cmd.taskId != null) graph.engine.setTask(cmd.taskId)
+            }
+            // v2.2 Task 4:换时钟 = 同一临界区内「终止当前段 + 按新时钟开始」(不新增切点类型)
+            ACTION_SWITCH_CLOCK -> applyClockSwitch(graph.engine, cmd)
             ACTION_PAUSE -> graph.engine.pause()
             ACTION_RESUME -> graph.engine.resume()
             ACTION_STOP -> {

@@ -21,15 +21,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.goodnight.R
+import com.goodnight.data.db.ProfileEntity
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.ui.morph.IconPaths
 import com.goodnight.ui.morph.PathIcon
 
 /**
- * v2.1 Task 7:计时页当前任务 chip。未绑定显示 [R.string.task_unbound]。
+ * v2.1 Task 7:计时页当前任务 chip。文案**由调用方给定**(v2.2 Task 4:计时卡传「任务 · 时钟」/
+ * 只有时钟名 / 相位文案回退),这里只管渲染与限宽。
  *
  * 空闲(无工作段)时禁点:此时没有可绑定的段(引擎 `setTask` 无快照即 no-op),
- * 点了只会白拉起一次前台服务、并留下"选了却没生效"的错觉。
+ * 点了只会白拉起一次前台服务、并留下"选了却没生效"的错觉;而空闲选时钟的入口在顶栏面板。
  *
  * 宽度**必须由调用方给定**(如 `Modifier.weight(1f, fill = false)`):chip 在卡片内容流内与徽标
  * 同排、与大数字不同排(见 [com.goodnight.ui.home.TimerCard]),故不自带限宽 —— 名字多长都由
@@ -40,7 +42,7 @@ import com.goodnight.ui.morph.PathIcon
  */
 @Composable
 internal fun TaskChip(
-    taskTitle: String?,
+    label: String,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier,
@@ -50,7 +52,7 @@ internal fun TaskChip(
         enabled = enabled,
         label = {
             Text(
-                taskTitle ?: stringResource(R.string.task_unbound),
+                label,
                 // labelLarge(14sp):chip 不再限宽,无需为迁就限宽降字号(可读性/可点性优先)
                 style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
@@ -62,8 +64,13 @@ internal fun TaskChip(
 }
 
 /**
- * v2.1 Task 7:任务选择器 —— 任务列表 + 「不绑定」一项(当前绑定打勾)。
- * 选中即回调(调用方发 SET_TASK 命令);选择器开关由调用方按 VM 状态挂载。
+ * v2.1 Task 7 / v2.2 Task 4:计时页横带选择器 —— 上半段是**时钟**(按任务分组:「该任务的专属时钟」
+ * 组 + 「通用时钟」组,组标题用资源 [R.string.clock_group_generic] / 任务名),下半段是既有的任务列表
+ * (含「不绑定」)。点时钟 -> [onPickClock](计时中会先弹确认);点任务 -> [onPick] 发 SET_TASK 命令。
+ *
+ * [clocks] 应传**当前绑定任务的作用域时钟**(VM 的 `availableClocks`):只给该任务专属 + 全部通用,
+ * 换时钟不会把会话带到别的任务上(新会话沿用当前绑定,见设计 §4)。[runningClockId] 用于给正在跑的
+ * 时钟打勾。
  *
  * [tasks] 应含当前绑定任务(即便它已不在进行中列表里,如已完成任务),否则会出现
  * "chip 显示某任务、列表里却哪一项都不打勾"的误导;[selectedId] 应传**能解析到实体**的
@@ -75,12 +82,26 @@ internal fun TaskPicker(
     selectedId: Long?,
     onPick: (Long?) -> Unit,
     onDismiss: () -> Unit,
+    clocks: TaskClocks = TaskClocks(),
+    runningClockId: Long? = null,
+    onPickClock: (ProfileEntity) -> Unit = {},
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.task_picker_title)) },
+        title = { Text(stringResource(R.string.timer_picker_title)) },
         text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                if (clocks.all.isNotEmpty()) {
+                    GroupLabel(stringResource(R.string.clock_section_label))
+                    clockPickerGroups(clocks).forEach { group ->
+                        GroupLabel(clockGroupLabel(group.taskId, tasks))
+                        group.clocks.forEach { c ->
+                            PickerRow(c.name, c.id == runningClockId) { onPickClock(c) }
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                }
+                GroupLabel(stringResource(R.string.task_picker_title))
                 if (tasks.isEmpty()) {
                     Text(
                         stringResource(R.string.tasks_empty_active),
@@ -97,6 +118,25 @@ internal fun TaskPicker(
         // confirmButton 非空,本弹窗没有主操作故留空槽(不渲染任何按钮)
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** 时钟分组标题:通用时钟一组;专属组用所属任务名(任务实体查不到时的兜底文案) */
+@Composable
+private fun clockGroupLabel(taskId: Long?, tasks: List<TaskEntity>): String =
+    if (taskId == null) stringResource(R.string.clock_group_generic)
+    else tasks.firstOrNull { it.id == taskId }?.title ?: stringResource(R.string.clock_group_specific)
+
+/** 分组小标题(时钟 / 选择任务 / 各组所属) */
+@Composable
+private fun GroupLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 4.dp),
     )
 }
 

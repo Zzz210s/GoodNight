@@ -59,6 +59,7 @@ internal fun TimerCard(
     ui: HomeUiState,
     displayMillis: Long,
     taskTitle: String?,
+    clockName: String?,
     onTaskChipClick: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
@@ -92,7 +93,10 @@ internal fun TimerCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TaskChip(
-                    taskTitle = taskTitle,
+                    // v2.2 Task 4:横带文案 =「任务 · 时钟」;只有时钟时只显时钟名;
+                    // 两者都没有(空库)回退「未绑定任务」—— 相位徽标已带 contentDescription,再写相位会被读屏连读两遍
+                    label = timerCardLabel(taskTitle, clockName, stringResource(R.string.timer_chip_pair))
+                        ?: stringResource(R.string.task_unbound),
                     enabled = snap != null,
                     onClick = onTaskChipClick,
                     modifier = Modifier.weight(1f, fill = false),

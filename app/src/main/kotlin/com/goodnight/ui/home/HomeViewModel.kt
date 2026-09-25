@@ -3,6 +3,7 @@ package com.goodnight.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.goodnight.data.db.ProfileEntity
+import com.goodnight.data.db.ProfileMode
 import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
 import com.goodnight.service.TimerCommands
@@ -10,6 +11,10 @@ import com.goodnight.timer.EnginePolicy
 import com.goodnight.timer.PolicyAction
 import com.goodnight.timer.RuntimeSnapshot
 import com.goodnight.timer.TimeProvider
+import com.goodnight.ui.tasks.ClockSwitchPrompt
+import com.goodnight.ui.tasks.PendingClockSwitch
+import com.goodnight.ui.tasks.TaskClocks
+import com.goodnight.ui.tasks.splitClocks
 import java.time.LocalDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -27,6 +33,11 @@ data class HomeUiState(
     val ready: Boolean = false,
     val profiles: List<ProfileEntity> = emptyList(),
     val activeProfileId: Long = -1,
+    /**
+     * v2.2 Task 4:计时卡横带显示的时钟 id —— 有会话(运行/暂停)时取**运行快照的时钟**(真值),
+     * 空闲时取 [activeProfileId](将要用哪个时钟)。两者由启动/换时钟时的镜像写入保持一致。
+     */
+    val clockId: Long = -1,
     val snap: RuntimeSnapshot? = null,
     val todayMillis: Long = 0,
     val days: Map<LocalDate, Long> = emptyMap(),
@@ -42,15 +53,19 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
 
     val ui: StateFlow<HomeUiState> = combine(
         graph.engine.ready,
-        graph.profileRepo.profiles,
+        // 指针 4(v2.2 Task 5):只喂活跃时钟 —— 归档行不能出现在顶栏选择器里,
+        // 否则选中一个已归档时钟后「开始」会真的把已下架的时钟跑起来
+        graph.profileRepo.observeAllActive(),
         graph.settingsRepo.activeProfileId,
         graph.engine.snapshot,
         graph.totalsRepo.dayTotals(from),
     ) { ready, profiles, active, snap, totals ->
+        val activeId = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: -1
         HomeUiState(
             ready = ready,
             profiles = profiles,
-            activeProfileId = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: -1,
+            activeProfileId = activeId,
+            clockId = displayedClockId(snap, activeId),
             snap = snap,
             todayMillis = totals.firstOrNull { it.date == today.toString() }?.total ?: 0,
             days = totals.associate { LocalDate.parse(it.date) to it.total },
@@ -92,6 +107,36 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
     fun onOpenTaskPicker() { _taskPickerOpen.value = true }
     fun onDismissTaskPicker() { _taskPickerOpen.value = false }
 
+    // ---- v2.2 Task 4:计时卡显示的时钟 + 计时中换时钟的确认 ----
+
+    /**
+     * 选择器里的可用时钟 = **当前绑定任务**的作用域时钟(该任务专属 + 全部通用),
+     * 与任务卡片同一口径([com.goodnight.data.ProfileRepository.availableFor]);
+     * 未绑任务时只有通用时钟 —— 换时钟不会把会话带到别的任务上。
+     */
+    val availableClocks: StateFlow<TaskClocks> = graph.engine.snapshot
+        .map { it?.taskId }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> graph.profileRepo.availableFor(id).map { splitClocks(it) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TaskClocks())
+
+    private val clockSwitch = ClockSwitchPrompt(graph)
+
+    /** 非空 = 弹「终止当前并开始新的?」确认;**未确认前不发任何命令** */
+    val pendingClockSwitch: StateFlow<PendingClockSwitch?> get() = clockSwitch.pending
+
+    /**
+     * 点选择器里的时钟:有会话(运行/暂停)先确认,确认后由 [ClockSwitchPrompt] 发一条换时钟命令,
+     * 新会话**沿用当前绑定任务**;空闲时只是改选(与顶栏面板选中同语义,不起画)。
+     */
+    fun onPickClock(clock: ProfileEntity) {
+        _taskPickerOpen.value = false
+        clockSwitch.pickKeepingBinding(clock) { clockSwitch.mirror(clock.id) }
+    }
+
+    fun onConfirmClockSwitch() = clockSwitch.confirm()
+    fun onDismissClockSwitch() = clockSwitch.dismiss()
+
     /**
      * 选择/解绑当前任务(null = 不绑定)。计时中切换由引擎按切点切段(§3 语义,引擎已实现);
      * 命令走 [TimerCommands] -> 服务 -> [com.goodnight.service.EngineCoordinator] —— 引擎的唯一
@@ -100,6 +145,25 @@ class HomeViewModel(val graph: AppGraph) : ViewModel() {
     fun onPickTask(id: Long?) {
         _taskPickerOpen.value = false
         TimerCommands.setTask(graph.appContext, id)
+    }
+
+    /**
+     * 首页大「开始」键:按当前选中的时钟起画(与按钮启用条件同源 —— [HomeUiState.activeProfileId]
+     * 已把「active 不在表里」回退到首个配置,此处照抄同一判定,避免两处口径漂移)。
+     *
+     * 时钟是**任务专属**的就把它的任务一起带上:否则「任务卡片启动 -> 终止 -> 首页开始」会一键产出
+     * 「时钟属于任务 A、账记在未绑定任务」的会话(设计只允许**通用**时钟走未绑定)。通用时钟留空。
+     */
+    suspend fun startSelectedClock() {
+        // 同 [ui] 的口径:只看活跃时钟,归档行不能成为当前时钟
+        val profiles = graph.profileRepo.observeAllActive().first()
+        val active = graph.settingsRepo.activeProfileId.first()
+        val id = if (profiles.any { it.id == active }) active else profiles.firstOrNull()?.id ?: return
+        val p = profiles.first { it.id == id }
+        TimerCommands.start(
+            graph.appContext, p.id, p.workMinutes * 60_000L, p.restMinutes * 60_000L,
+            countUp = p.mode == ProfileMode.COUNTUP, taskId = p.taskId,
+        )
     }
 
     /** @return true 时调用方需发 TimerCommands.restartPhase */

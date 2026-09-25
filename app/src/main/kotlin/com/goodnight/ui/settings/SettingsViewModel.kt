@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.goodnight.data.ReminderIntensity
 import com.goodnight.data.db.ProfileEntity
-import com.goodnight.data.db.ProfileMode
+import com.goodnight.data.db.TaskEntity
 import com.goodnight.di.AppGraph
 import com.goodnight.timer.EnginePolicy
 import com.goodnight.timer.PolicyAction
@@ -15,7 +15,6 @@ import com.goodnight.timer.RuntimeSnapshot
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -29,6 +28,7 @@ private data class BackupState(
 )
 
 data class SettingsUiState(
+    /** 只含**活跃**(未归档)时钟:归档行仍在库里供历史解析,但列表与选择器都不该再喂给用户 */
     val profiles: List<ProfileEntity> = emptyList(),
     val totals: Map<Long, Long> = emptyMap(),
     val intensity: ReminderIntensity = ReminderIntensity.STANDARD,
@@ -43,6 +43,10 @@ data class SettingsUiState(
     val backupError: String? = null,
     /** v1.14.0:疲劳提醒开关(同一任务连续工作 90 分钟提醒长休息) */
     val fatigueReminder: Boolean = true,
+    // v2.2 Task 5:时钟管理页的「通用 / 任务专属」两段与归属选择器
+    /** 全部任务(未完成在前)—— 分组顺序与归属选择的候选,来自 observeAllOrdered */
+    val tasks: List<TaskEntity> = emptyList(),
+    val sections: List<ClockSection> = emptyList(),
 )
 
 class SettingsViewModel(val graph: AppGraph) : ViewModel() {
@@ -51,7 +55,8 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
 
     val ui: StateFlow<SettingsUiState> = combine(
         combine(
-            graph.profileRepo.profiles,
+            // 指针 1(v2.2 Task 5):列表与「至少保留 1 个」都只看看得见的行 —— 归档行不参与
+            graph.profileRepo.observeAllActive(),
             graph.totalsRepo.profileTotals(),
             graph.settingsRepo.reminderIntensity,
             graph.engine.snapshot,
@@ -69,10 +74,12 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
             BackupState(pack, auto, uri, last, err)
         },
         graph.settingsRepo.fatigueReminder,
-    ) { s, b, fatigue ->
+        graph.taskRepo.observeAllOrdered(),
+    ) { s, b, fatigue, tasks ->
         s.copy(
             themePack = b.pack, autoBackup = b.auto, backupUri = b.uri,
             backupLastAt = b.last, backupError = b.err, fatigueReminder = fatigue,
+            tasks = tasks, sections = clockSections(s.profiles, tasks),
         )
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -80,75 +87,6 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
     fun setFatigueReminder(on: Boolean) {
         viewModelScope.launch { graph.settingsRepo.setFatigueReminder(on) }
     }
-
-    // v1.9.12 #37:开关只持久化 —— 备份时机改为工作段结束事件触发(EventApplier 调 scheduleNow),
-    // 不再每日周期注册;选目录后立即做一次备份(立即验证目录可用)。
-    fun setAutoBackup(context: Context, on: Boolean) {
-        viewModelScope.launch { graph.settingsRepo.setAutoBackupEnabled(on) }
-        if (on) com.goodnight.data.AutoBackupScheduler.scheduleNow(context)
-        else com.goodnight.data.AutoBackupScheduler.cancel(context)
-    }
-
-    suspend fun setBackupUri(context: Context, uri: String) {
-        // v1.13.0:必须先持久化目录授权,否则重启后备份目录失效
-        com.goodnight.data.BackupPermissions.persist(context, android.net.Uri.parse(uri))
-        graph.settingsRepo.setBackupUri(uri)
-        graph.settingsRepo.setAutoBackupEnabled(true)
-        com.goodnight.data.AutoBackupScheduler.scheduleNow(context)
-    }
-
-    /** v1.9.13 手动备份:仅存目录(不启用自动备份),并立即写固定文件覆盖。@return 是否写入成功 */
-    suspend fun setBackupDir(context: Context, uri: String): Boolean {
-        com.goodnight.data.BackupPermissions.persist(context, android.net.Uri.parse(uri))
-        graph.settingsRepo.setBackupUri(uri)
-        return backupNow()
-    }
-
-    /**
-     * v1.9.13 手动备份:读已存目录,写固定文件(覆盖),不触发自动备份调度。
-     * v1.13.0:写入前先确保持久化授权在(不在就补做);失败按错误码记录,便于设置页给出准确提示。
-     * @return 是否写入成功(目录未选/授权失效/写盘失败均为 false)
-     */
-    suspend fun backupNow(): Boolean {
-        val uriStr = graph.settingsRepo.backupUri.first() ?: return false
-        val uri = android.net.Uri.parse(uriStr)
-        if (!com.goodnight.data.BackupPermissions.ensure(graph.appContext, uri)) {
-            graph.settingsRepo.setBackupError(com.goodnight.data.BackupError.PERMISSION)
-            return false
-        }
-        val json = com.goodnight.data.DataTransfer.exportJson(graph.db)
-        return when (com.goodnight.data.BackupWriter.write(graph.appContext, uri, json)) {
-            com.goodnight.data.BackupWriteResult.OK -> {
-                graph.settingsRepo.setBackupLastAt(System.currentTimeMillis())
-                graph.settingsRepo.setBackupError(null)
-                true
-            }
-            com.goodnight.data.BackupWriteResult.PERMISSION_DENIED -> {
-                graph.settingsRepo.setBackupError(com.goodnight.data.BackupError.PERMISSION)
-                false
-            }
-            com.goodnight.data.BackupWriteResult.FAILED -> {
-                graph.settingsRepo.setBackupError(com.goodnight.data.BackupError.WRITE)
-                false
-            }
-        }
-    }
-
-    /**
-     * 手动恢复:自 SAF 文档 Uri 读 JSON 并合并入库。
-     * @return 写入的行数合计(配置/日累计/段/任务,v2.1 Task 9 起含任务);读/解析失败返回 null(由 UI 提示)
-     */
-    suspend fun restoreFrom(uri: android.net.Uri): Int? = runCatching {
-        val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            graph.appContext.contentResolver.openInputStream(uri)?.use {
-                it.readBytes().toString(Charsets.UTF_8)
-            } ?: ""
-        }
-        val counts = com.goodnight.data.DataTransfer.importJson(graph.db, text)
-        // v1.10.8:导入后按"段落派生"重算全部合计,保证与每日详情时间段之和一致
-        graph.totalsRepo.recomputeAllDays()
-        counts.total
-    }.getOrNull()
 
     fun refreshExactAlarm(context: Context) {
         viewModelScope.launch {
@@ -158,11 +96,16 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
         }
     }
 
-    suspend fun createProfile(name: String, workMinutes: Int, restMinutes: Int, mode: Int): Long =
+    /** v2.2:重名返回 null(旧版返回 -1L,调用方一律忽略返回值);[taskId] = 归属(null = 通用层) */
+    suspend fun createProfile(
+        name: String,
+        workMinutes: Int,
+        restMinutes: Int,
+        mode: Int,
+        taskId: Long? = null,
+    ): Long? =
         // 对话框带模式选择(新建缺省倒计时由对话框状态决定);禁缺省:模式是显式用户选择
-        graph.profileRepo.create(name, workMinutes, restMinutes, mode)
-
-    suspend fun renameProfile(id: Long, name: String) = graph.profileRepo.rename(id, name)
+        graph.profileRepo.create(name, workMinutes, restMinutes, mode, taskId)
 
     /** @return true 时调用方需发 TimerCommands.restartPhase(mode 参数为对话框当前选中的模式) */
     suspend fun editDurations(p: ProfileEntity, workMinutes: Int, restMinutes: Int, mode: Int): Boolean {
@@ -170,25 +113,6 @@ class SettingsViewModel(val graph: AppGraph) : ViewModel() {
         if (action == PolicyAction.IGNORED) return false
         graph.profileRepo.updateDurations(p.id, workMinutes, restMinutes, mode)
         return action == PolicyAction.RESTART_PHASE
-    }
-
-    /** @return true 时调用方需先发 TimerCommands.stop 再删除 */
-    suspend fun deleteProfile(p: ProfileEntity): Boolean {
-        val action = EnginePolicy.onDelete(graph.engine.snapshot.value, p.id, graph.profileRepo.count().toInt())
-        when (action) {
-            PolicyAction.IGNORED -> return false
-            PolicyAction.RESET_THEN_DELETE -> {
-                graph.profileRepo.delete(p)
-                graph.totalsRepo.deleteProfileData(p.id)
-                return true // 调用方发 stop(顺序:reset 引擎结算后清快照;DB 行已删)
-            }
-            PolicyAction.DELETE -> {
-                graph.profileRepo.delete(p)
-                graph.totalsRepo.deleteProfileData(p.id)  // v1.10.8:级联清段落/合计,避免"已删除配置"残留
-                return false
-            }
-            else -> return false
-        }
     }
 
     /** suspend 落库(非计划里的 viewModelScope 发射后不管):Robolectric 主循环暂停, fire-and-forget

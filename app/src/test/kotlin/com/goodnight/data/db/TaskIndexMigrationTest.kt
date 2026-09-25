@@ -52,7 +52,7 @@ class TaskIndexMigrationTest {
     }
 
     /**
-     * 手工建 v3 库 -> 经 MIGRATION_3_4 升到 v4:两个索引必须存在且列/列序正确,
+     * 手工建 v3 库 -> 经 MIGRATION_3_4/4_5 升到 v5:两个索引必须存在且列/列序正确,
      * 并且索引集合与新建库完全一致(少建=真机崩溃,多建=schema 分叉)。
      */
     @Test fun migration3To4CreatesIndexesDeclaredByEntities() {
@@ -71,6 +71,7 @@ class TaskIndexMigrationTest {
                 GoodNightDatabase.MIGRATION_1_2,
                 GoodNightDatabase.MIGRATION_2_3,
                 GoodNightDatabase.MIGRATION_3_4,
+                GoodNightDatabase.MIGRATION_4_5,
             )
             .build()
 
@@ -84,12 +85,16 @@ class TaskIndexMigrationTest {
             indexColumns("index_task_done_sortOrder"),
         )
         assertEquals(listOf("done", "sortOrder"), indexColumns("index_task_done_sortOrder"))
+        // v2.2 Task 1:profile 的索引同样必须与实体声明一致(name 去唯一 + 新增 taskId)
+        assertNotNull("迁移后缺 index_profile_taskId", indexColumns("index_profile_taskId"))
+        assertEquals(listOf("taskId"), indexColumns("index_profile_taskId"))
+        assertEquals(listOf("name"), indexColumns("index_profile_name"))
 
         val fresh = GoodNightDatabase.build(ctx, freshDbName)
         try {
             val migrated = db!!.openHelper.writableDatabase
             val created = fresh.openHelper.writableDatabase
-            for (table in listOf("focus_session", "task")) {
+            for (table in listOf("focus_session", "task", "profile")) {
                 assertEquals(
                     "表 $table 的索引集合与新建库不一致",
                     indexNames(created, table),

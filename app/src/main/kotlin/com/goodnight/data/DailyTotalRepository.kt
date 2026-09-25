@@ -67,11 +67,17 @@ class DailyTotalRepository(
      * v2.1 Task 8:窗口内按任务分解(段起点归属,与 [sessionsBetweenMs] 同口径)。
      * 标题在仓库层用 task 表补齐;窗口内无段 → 空列表(界面不渲染该区块),
      * 有段时「未绑定」恒在末位(即使 0)。排序/占比口径见 [taskSlices]/[taskPercents]。
+     *
+     * v2.2 Task 6:每个任务行再附上它的时钟明细([TaskSlice.clocks])。名称用 **profile 全表**
+     * (`profileDao().getAll()`,含归档)解析 —— 归档时钟的名字在报表里仍要显示。
      */
     suspend fun taskBreakdown(fromMs: Long, toMs: Long): List<TaskSlice> {
         val rows = sessionDao.taskTotalsBetween(fromMs, toMs)
         if (rows.isEmpty()) return emptyList()
-        return taskSlices(rows, db.taskDao().allNow().associate { it.id to it.title })
+        val titles = db.taskDao().allNow().associate { it.id to it.title }
+        val names = db.profileDao().getAll().associate { it.id to it.name }
+        val clocks = clockSlicesByTask(sessionDao.taskProfileTotalsBetween(fromMs, toMs), titles, names)
+        return taskSlices(rows, titles).map { it.copy(clocks = clocks[it.taskId].orEmpty()) }
     }
 
     /**

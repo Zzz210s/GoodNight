@@ -28,6 +28,37 @@ class TimerCommandsTest {
         assertTrue("正计时须显式携带 count_up", up.getBooleanExtra(EXTRA_COUNT_UP, false))
     }
 
+    /**
+     * v2.2 Task 3:任务卡片「点 chip 即开始」把任务 id 搭在 START 上(与时钟同一条命令),
+     * 既有调用方不传 = 哨兵值 = 不绑定(逐字节不变);解析回 null 与 SET_TASK 同口径。
+     */
+    @Test fun startIntentCarriesTaskIdOnlyWhenGiven() {
+        val plain = TimerCommands.startIntent(ctx, 3L, 60_000L, 20_000L)
+        assertEquals(NO_TASK_ID, plain.getLongExtra(EXTRA_TASK_ID, NO_TASK_ID))
+        assertNull(plain.toTimerCommand(ACTION_START).taskId)
+        val bound = TimerCommands.startIntent(ctx, 3L, 60_000L, 20_000L, taskId = 42L)
+        assertEquals(ACTION_START, bound.action)
+        assertEquals(42L, bound.getLongExtra(EXTRA_TASK_ID, NO_TASK_ID))
+        assertEquals(42L, bound.toTimerCommand(ACTION_START).taskId)
+    }
+
+    /**
+     * v2.2 Task 4:换时钟的命令载荷与 start 同形(时钟/工作/休息/模式/任务),但 action 不同 ——
+     * 服务据此在同一把锁内「终止当前 + 重新开始」(不新增切点类型)。
+     */
+    @Test fun switchClockIntentCarriesClockAndTask() {
+        val plain = TimerCommands.switchClockIntent(ctx, 3L, 60_000L, 20_000L)
+        assertEquals(ACTION_SWITCH_CLOCK, plain.action)
+        assertEquals(3L, plain.getLongExtra(EXTRA_PROFILE_ID, -1L))
+        assertEquals(60_000L, plain.getLongExtra(EXTRA_WORK_MILLIS, 0L))
+        assertEquals(20_000L, plain.getLongExtra(EXTRA_REST_MILLIS, 0L))
+        assertFalse(plain.getBooleanExtra(EXTRA_COUNT_UP, false))
+        assertNull("未绑定任务用哨兵值,解析回 null", plain.toTimerCommand(ACTION_SWITCH_CLOCK).taskId)
+        val bound = TimerCommands.switchClockIntent(ctx, 3L, 60_000L, 20_000L, countUp = true, taskId = 42L)
+        assertTrue(bound.getBooleanExtra(EXTRA_COUNT_UP, false))
+        assertEquals(42L, bound.toTimerCommand(ACTION_SWITCH_CLOCK).taskId)
+    }
+
     /** v2.1 Task 7:任务切换命令携带任务 id(「不绑定」用哨兵值表达 null,解析回 null) */
     @Test fun setTaskIntentCarriesTaskId() {
         val bound = TimerCommands.setTaskIntent(ctx, 42L)

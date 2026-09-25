@@ -41,7 +41,7 @@ class ReportTaskBreakdownTest {
             hour * 3_600_000L + min * 60_000L
 
     private suspend fun seed(g: AppGraph) {
-        val p = g.profileRepo.create("番茄", 25, 5)
+        val p = g.profileRepo.create("番茄", 25, 5)!!
         val a = g.taskRepo.create("写报告", 1)!!
         g.totalsRepo.recordWorkSession(p, at("2026-09-01", 9), at("2026-09-01", 10), zone, a)
         g.totalsRepo.recordWorkSession(p, at("2026-09-01", 14), at("2026-09-01", 14, 30), zone, null)
@@ -73,7 +73,7 @@ class ReportTaskBreakdownTest {
 
     @Test fun outOfWindowSessionsAreExcluded() = runTest {
         val g = graph("out_window")
-        val p = g.profileRepo.create("番茄", 25, 5)
+        val p = g.profileRepo.create("番茄", 25, 5)!!
         val a = g.taskRepo.create("旧任务", 1)!!
         g.totalsRepo.recordWorkSession(p, at("2026-08-25", 9), at("2026-08-25", 10), zone, a)
         val v = vm(g, "2026-09-06")
@@ -83,7 +83,7 @@ class ReportTaskBreakdownTest {
 
     @Test fun taskRenameRefreshesBreakdownTitle() = runTest {
         val g = graph("rename")
-        val p = g.profileRepo.create("番茄", 25, 5)
+        val p = g.profileRepo.create("番茄", 25, 5)!!
         val a = g.taskRepo.create("旧名", 1)!!
         g.totalsRepo.recordWorkSession(p, at("2026-09-01", 9), at("2026-09-01", 10), zone, a)
         val v = vm(g, "2026-09-06")

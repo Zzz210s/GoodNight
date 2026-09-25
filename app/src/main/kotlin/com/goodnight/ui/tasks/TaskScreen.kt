@@ -1,13 +1,17 @@
 package com.goodnight.ui.tasks
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -51,6 +55,12 @@ fun TaskScreen(onBack: () -> Unit) {
     val done by vm.done.collectAsStateWithLifecycle()
     val inputError by vm.inputError.collectAsStateWithLifecycle()
     val prompt by vm.deletePrompt.collectAsStateWithLifecycle()
+    // v2.2 Task 3:每张卡片的可用时钟(专属 + 通用)与「+ 添加时钟」弹窗状态
+    val clocksByTask by vm.clocksByTask.collectAsStateWithLifecycle()
+    val addClockTaskId by vm.addClockTaskId.collectAsStateWithLifecycle()
+    val clockError by vm.clockError.collectAsStateWithLifecycle()
+    // v2.2 Task 4:计时中点另一个时钟 -> 先确认(未确认前不发命令)
+    val pendingClockSwitch by vm.pendingClockSwitch.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<TaskEntity?>(null) }
 
@@ -81,6 +91,9 @@ fun TaskScreen(onBack: () -> Unit) {
                     task = task,
                     index = index,
                     count = active.size,
+                    clocks = clocksByTask[task.id] ?: TaskClocks(),
+                    onClockClick = { clock -> vm.onStartClock(task.id, clock) },
+                    onAddClock = { vm.onAddClockRequest(task.id) },
                     onMove = vm::onMove,
                     onToggle = { vm.onToggleDone(task.id) },
                     onRename = { vm.clearInputError(); renaming = task },
@@ -129,5 +142,38 @@ fun TaskScreen(onBack: () -> Unit) {
     }
     prompt?.let { p ->
         TaskDeleteDialog(prompt = p, onConfirm = vm::onDeleteConfirmed, onDismiss = vm::onDeleteDismiss)
+    }
+    addClockTaskId?.let { taskId ->
+        // 重名预校验只针对该任务的专属时钟(作用域口径:通用时钟是另一层,不挡新建)
+        TaskClockDialog(
+            scoped = clocksByTask[taskId]?.specific ?: emptyList(),
+            error = clockError,
+            onDismiss = vm::onAddClockDismiss,
+            onConfirm = { name, work, rest, mode -> vm.onCreateClock(taskId, name, work, rest, mode) },
+        )
+    }
+    if (pendingClockSwitch != null) {
+        ClockSwitchDialog(onConfirm = vm::onConfirmClockSwitch, onDismiss = vm::onDismissClockSwitch)
+    }
+}
+
+/** 分组小标题(进行中 / 已完成) */
+@Composable
+internal fun SectionLabel(text: String) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** 空列表占位卡(还没有任务 / 还没有已完成的任务) */
+@Composable
+internal fun EmptyHint(text: String) {
+    Card(Modifier.fillMaxWidth()) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(12.dp),
+        )
     }
 }

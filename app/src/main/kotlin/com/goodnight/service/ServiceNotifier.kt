@@ -35,13 +35,8 @@ class ServiceNotifier(
 
     private var clampJob: Job? = null
 
-    /**
-     * 最近一次解析到的任务标题(按 taskId 记)。
-     * 存在的理由:到期钳制重发等发布路径**不带标题**(`post(cur)`),而钳制被设计的场景
-     * (推进迟到 >250ms,如 Doze/inexact 闹钟)里 ckptAccum 已到顶、delta==0,不会再有快照
-     * 发射把名字带回来 —— 没有这层兜底,通知标题会从「工作中 · 写周报」退回「工作中」。
-     */
-    @Volatile private var cachedTitle: Pair<Long, String?>? = null
+    /** v2.2 Task 7:任务名 + 时钟名的解析与缓存(见 [NotifTitles]) */
+    private val titles = NotifTitles(graph.taskRepo, graph.profileRepo)
 
     fun attachForeground(sink: ((Notification) -> Unit)?) {
         foregroundSink = sink
@@ -50,41 +45,37 @@ class ServiceNotifier(
     /**
      * v2.1:快照绑定任务的标题(通知标题拼接用)。未绑定 / 已删除 / 查询失败一律 null,
      * 通知回退到相位文案 —— 发布路径不能因一次 DB 查询失败而中断。
-     * 只兜 [Exception]:作用域取消期间的 [kotlinx.coroutines.CancellationException] 必须继续
-     * 上抛,否则服务 onDestroy 后调用方还会接着走前台化路径。
+     * 注:本函数一次性解析**任务名与时钟名**,两者共一份缓存,见 [NotifTitles]。
      */
-    suspend fun titleFor(snap: RuntimeSnapshot?): String? {
-        val id = snap?.taskId ?: return null
-        val title = try {
-            graph.taskRepo.titleById(id)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        }
-        cachedTitle = id to title
-        return title
-    }
+    suspend fun titleFor(snap: RuntimeSnapshot?): String? = titles.resolve(snap).task
 
-    /** 显式标题优先;缺省时按快照绑定的任务复用最近一次解析结果(同一 taskId 才复用,防串名) */
-    private fun titleOrDefault(snap: RuntimeSnapshot?, taskTitle: String?): String? =
-        taskTitle ?: cachedTitle?.takeIf { it.first == snap?.taskId }?.second
+    /** v2.2 Task 7:快照所选中时钟的名字(未删、含归档)—— 同一份缓存,不会额外查库 */
+    suspend fun clockFor(snap: RuntimeSnapshot?): String? = titles.resolve(snap).clock
 
     /**
-     * v2.1 Task 6:任务改名/删除后重解析标题并重发通知。
-     * [cachedTitle] 按 taskId 记,不主动失效的话钳制重发会把旧名写回;而只清缓存又会让
-     * 下一次不带标题的重发连任务名一起丢掉 —— 所以这里重解析一次(顺带刷新缓存)并立即重发。
-     * 无快照时无事可做(空闲通知本就不带任务名)。
+     * v2.1 Task 6 / v2.2 Task 7:任务或时钟改名/删除后重解析两段名字并重发通知。
+     * [NotifTitles] 的缓存按 (taskId, profileId) 记 —— 键是**身份**不是名字,不主动失效的话
+     * 钳制重发会把旧名写回,所以这里用 refresh 强制重查并把这组名字**显式**交给 post
+     * (启动协程后快照可能已变,不能指望 post 自己去读缓存)。
+     * 任务页改名走 [com.goodnight.ui.tasks.TaskListViewModel],时钟管理页改名走
+     * [com.goodnight.ui.settings.commitScopeAndName] —— 两处都必须调本函数。
+     * 无快照时无事可做(空闲通知本就不带名字)。
      */
-    fun refreshTaskTitle() {
+    fun refreshNames() {
         val snap = graph.engine.snapshot.value ?: return
-        scope.launch { post(snap, titleFor(snap)) }
+        scope.launch {
+            val names = titles.resolve(snap, refresh = true)
+            post(snap, names.task, names.clock)
+        }
     }
 
-    /** 按快照发布计时/空闲通知;有服务挂载时同时前台化。[taskTitle] 非空时标题带上任务名 */
-    fun post(snap: RuntimeSnapshot?, taskTitle: String? = null) {
-        val title = titleOrDefault(snap, taskTitle)
-        val n = if (snap != null) TimerNotifications.inProgress(context, snap, title)
+    /** 按快照发布计时/空闲通知;有服务挂载时同时前台化。[taskTitle]/[clockName] 非空时标题分别带上 */
+    fun post(snap: RuntimeSnapshot?, taskTitle: String? = null, clockName: String? = null) {
+        // 缓存只兜「调用方没传」的片段;身份不匹配(任务/时钟都换了)时一律用传进来的值
+        val cached = titles.cached(snap)
+        val title = taskTitle ?: cached?.task
+        val clock = clockName ?: cached?.clock
+        val n = if (snap != null) TimerNotifications.inProgress(context, snap, title, clock)
         else TimerNotifications.minimal(context)
         runCatching {
             context.getSystemService(android.app.NotificationManager::class.java)
@@ -92,7 +83,8 @@ class ServiceNotifier(
         }
         DiagLog.add(
             "Notif",
-            "发布通知 有快照=${snap != null} 任务=${title ?: "无"} 前台化=${foregroundSink != null} ${DiagLog.env()}",
+            "发布通知 有快照=${snap != null} 任务=${title ?: "无"} 时钟=${clock ?: "无"} " +
+                "前台化=${foregroundSink != null} ${DiagLog.env()}",
         )
         foregroundSink?.invoke(n)
         scheduleExpiryClamp(snap)

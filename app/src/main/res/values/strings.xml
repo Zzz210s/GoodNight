@@ -39,6 +39,15 @@
     <string name="empty_clocks">No clocks yet — tap + above to create one</string>
     <string name="delete_confirm_title">Delete selected clocks</string>
     <string name="delete_confirm_body">Delete %1$d clocks and their accumulated records? This cannot be undone.</string>
+    <string name="clock_section_generic">Generic clocks</string>
+    <string name="clock_scope_label">Belongs to</string>
+    <string name="clock_scope_generic">Generic</string>
+    <string name="clock_name_taken">A clock with this name already exists here. Pick another name.</string>
+    <string name="delete_confirm_archive_body">Of the %1$d selected clocks, %2$d will be archived (they have records or are in use): the row stays, hidden from the list, and their %3$d recorded minutes are kept. The other %4$d will be deleted permanently.</string>
+    <string name="delete_confirm_archive_body_no_minutes">Of the %1$d selected clocks, %2$d will be archived (they are in use or have records): the rows stay and are hidden from the list. The other %3$d will be deleted permanently.</string>
+    <string name="delete_confirm_in_use_note">A selected clock is running or paused: archiving it keeps the current session going.</string>
+    <string name="delete_keep_one">At least one clock must remain: the last clock can be neither deleted nor archived. Create another clock first, then archive or delete this one.</string>
+    <string name="delete_keep_one_note">You selected %1$d; %2$d of them stay (at least one active clock must remain).</string>
     <string name="name_label">Name</string>
     <string name="work_minutes">Work minutes (1-180)</string>
     <string name="rest_minutes">Rest minutes (1-60)</string>
@@ -106,6 +115,10 @@
     <!-- report by task (v2.1) -->
     <string name="report_by_task">By task</string>
     <string name="report_task_meta">%1$d sessions · %2$d%%</string>
+    <!-- report clock detail (v2.2) -->
+    <string name="report_clock_unknown">Unknown clock</string>
+    <string name="report_clock_details">Clock details</string>
+    <string name="report_clock_meta">%1$d sessions · %2$d%% of task</string>
     <string name="color_theme">Color theme</string>
     <string name="pack_ember">Ember</string>
     <string name="pack_green">Light green</string>
@@ -152,6 +165,11 @@
     <string name="task_title_blank">Name cannot be empty</string>
     <string name="task_title_too_long">Name too long (max %1$d characters)</string>
     <string name="task_delete_confirm">Delete this task? Its %1$d recorded minutes stay as unbound</string>
+    <!-- plurals:英文单数需要 one 形态(「1 dedicated clocks」不成立);zh 只有 other -->
+    <plurals name="task_delete_confirm_clocks">
+        <item quantity="one">Delete this task? Its %1$d recorded minutes stay as unbound; its %2$d dedicated clock becomes a generic clock</item>
+        <item quantity="other">Delete this task? Its %1$d recorded minutes stay as unbound; its %2$d dedicated clocks become generic clocks</item>
+    </plurals>
     <string name="task_delete">Delete task</string>
     <string name="task_drag">Long press and drag to reorder</string>
     <string name="task_done_at">Completed %1$s</string>
@@ -159,4 +177,16 @@
     <string name="task_unbound">No task</string>
     <string name="task_picker_title">Pick a task</string>
     <string name="task_picker_unbind">Unbind</string>
+    <!-- task clocks (v2.2): clock chips on a task card -->
+    <string name="task_add_clock">Add clock</string>
+    <string name="task_clock_legend">No outline = this task\'s, pale = shared</string>
+    <string name="task_clock_name_taken">A clock with this name already exists for this task. Pick another name.</string>
+    <!-- timer card (v2.2 Task 4): "task · clock" chip + clock switching confirmation -->
+    <string name="timer_chip_pair">%1$s · %2$s</string>
+    <string name="timer_picker_title">Tasks and clocks</string>
+    <string name="clock_section_label">Clocks</string>
+    <string name="clock_group_generic">Shared clocks</string>
+    <string name="clock_group_specific">Task clocks</string>
+    <string name="clock_switch_title">Switch clock</string>
+    <string name="clock_switch_confirm">Stop the current one and start the new one?</string>
 </resources>

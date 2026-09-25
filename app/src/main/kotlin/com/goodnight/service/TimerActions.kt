@@ -14,6 +14,12 @@ const val ACTION_RESTART_PHASE = "com.goodnight.action.RESTART_PHASE"
 /** v2.1 Task 7:绑定/解绑当前工作段的任务(计时页 chip);null 用哨兵 [NO_TASK_ID] 表达 */
 const val ACTION_SET_TASK = "com.goodnight.action.SET_TASK"
 
+/**
+ * v2.2 Task 4:计时中换时钟 = 一条命令内「终止当前段 + 按新时钟开始」(设计 §4 拍板 1)。
+ * 载荷与 [ACTION_START] 同形;不新增切点类型,引擎动作为 `reset()` 后 `start()`。
+ */
+const val ACTION_SWITCH_CLOCK = "com.goodnight.action.SWITCH_CLOCK"
+
 /** v1.10.11:通知"对号"确认(清除提醒通知) */
 const val ACTION_ACK = "com.goodnight.action.ACK"
 

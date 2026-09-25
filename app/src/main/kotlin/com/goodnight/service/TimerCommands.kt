@@ -4,10 +4,19 @@ import android.content.Context
 import android.content.Intent
 
 /** UI -> 服务的命令入口。start 用 startForegroundService(Activity 前台调用合法),其余走 startService。
- *  countUp(正计时)经 EXTRA_COUNT_UP 贯穿(缺省 false = 倒计时);intent 构建器 internal 供单测钉 extras。 */
+ *  countUp(正计时)经 EXTRA_COUNT_UP 贯穿(缺省 false = 倒计时);intent 构建器 internal 供单测钉 extras。
+ *  v2.2 Task 3:start 可同时带上任务 id(缺省 null = 不绑定)—— 任务卡片「点 chip 即开始」要在
+ *  **同一条命令**里记下「哪个任务的哪个时钟」,分两条 intent 下发的顺序无法保证。 */
 object TimerCommands {
-    fun start(context: Context, profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean = false) {
-        context.startForegroundService(startIntent(context, profileId, workMillis, restMillis, countUp))
+    fun start(
+        context: Context,
+        profileId: Long,
+        workMillis: Long,
+        restMillis: Long,
+        countUp: Boolean = false,
+        taskId: Long? = null,
+    ) {
+        context.startForegroundService(startIntent(context, profileId, workMillis, restMillis, countUp, taskId))
     }
 
     fun pause(context: Context) = context.startService(intent(context, ACTION_PAUSE))
@@ -25,12 +34,53 @@ object TimerCommands {
      */
     fun setTask(context: Context, taskId: Long?) = context.startService(setTaskIntent(context, taskId))
 
-    internal fun startIntent(context: Context, profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean) =
+    internal fun startIntent(
+        context: Context,
+        profileId: Long,
+        workMillis: Long,
+        restMillis: Long,
+        countUp: Boolean = false,
+        taskId: Long? = null,
+    ) =
         intent(context, ACTION_START)
             .putExtra(EXTRA_PROFILE_ID, profileId)
             .putExtra(EXTRA_WORK_MILLIS, workMillis)
             .putExtra(EXTRA_REST_MILLIS, restMillis)
             .putExtra(EXTRA_COUNT_UP, countUp)
+            .putExtra(EXTRA_TASK_ID, taskId ?: NO_TASK_ID)
+
+    /**
+     * v2.2 Task 4:计时中换时钟 —— **一条**命令内「终止当前 + 重新开始」(设计 §4 拍板 1)。
+     * 不用「STOP 再 START」两条 intent:STOP 会走拆除握手(脱前台 + 空闲通知 + stopSelf),
+     * 换时钟语义上从不进入空闲态,前台通知会闪掉,且两条 intent 的到达顺序不在契约内。
+     */
+    fun switchClock(
+        context: Context,
+        profileId: Long,
+        workMillis: Long,
+        restMillis: Long,
+        countUp: Boolean = false,
+        taskId: Long? = null,
+    ) {
+        context.startForegroundService(
+            switchClockIntent(context, profileId, workMillis, restMillis, countUp, taskId),
+        )
+    }
+
+    internal fun switchClockIntent(
+        context: Context,
+        profileId: Long,
+        workMillis: Long,
+        restMillis: Long,
+        countUp: Boolean = false,
+        taskId: Long? = null,
+    ) =
+        intent(context, ACTION_SWITCH_CLOCK)
+            .putExtra(EXTRA_PROFILE_ID, profileId)
+            .putExtra(EXTRA_WORK_MILLIS, workMillis)
+            .putExtra(EXTRA_REST_MILLIS, restMillis)
+            .putExtra(EXTRA_COUNT_UP, countUp)
+            .putExtra(EXTRA_TASK_ID, taskId ?: NO_TASK_ID)
 
     internal fun restartPhaseIntent(context: Context, profileId: Long, workMillis: Long, restMillis: Long, countUp: Boolean) =
         intent(context, ACTION_RESTART_PHASE)

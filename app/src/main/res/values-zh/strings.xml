@@ -40,6 +40,15 @@
     <string name="empty_clocks">还没有时钟,点击右上角 + 新建</string>
     <string name="delete_confirm_title">删除所选时钟</string>
     <string name="delete_confirm_body">将删除 %1$d 个时钟及其累计记录?不可撤销。</string>
+    <string name="clock_section_generic">通用时钟</string>
+    <string name="clock_scope_label">归属</string>
+    <string name="clock_scope_generic">通用</string>
+    <string name="clock_name_taken">该归属下已有同名时钟,换个名字</string>
+    <string name="delete_confirm_archive_body">所选 %1$d 个时钟中 %2$d 个会归档(有时间记录或正在使用):行保留、从列表隐藏,已记录的 %3$d 分钟不丢;其余 %4$d 个将删除,不可撤销。</string>
+    <string name="delete_confirm_archive_body_no_minutes">所选 %1$d 个时钟中 %2$d 个会归档(正在使用或已有记录):行保留、从列表隐藏;其余 %3$d 个将删除,不可撤销。</string>
+    <string name="delete_confirm_in_use_note">所选时钟正在计时/暂停中:归档后当前这段计时会继续。</string>
+    <string name="delete_keep_one">至少保留 1 个时钟:最后一个时钟既不能删除也不能归档。请先新建一个时钟,再来归档或删除这个。</string>
+    <string name="delete_keep_one_note">已选 %1$d 个,其中 %2$d 个会保留(至少保留 1 个活跃时钟)。</string>
     <string name="name_label">名称</string>
     <string name="work_minutes">工作分钟 (1-180)</string>
     <string name="rest_minutes">休息分钟 (1-60)</string>
@@ -106,6 +115,10 @@
     <!-- report by task (v2.1) -->
     <string name="report_by_task">按任务</string>
     <string name="report_task_meta">%1$d 次 · %2$d%%</string>
+    <!-- report clock detail (v2.2) -->
+    <string name="report_clock_unknown">未知时钟</string>
+    <string name="report_clock_details">时钟明细</string>
+    <string name="report_clock_meta">%1$d 次 · 任务内 %2$d%%</string>
     <string name="color_theme">配色</string>
     <string name="pack_ember">经典橙</string>
     <string name="pack_green">浅绿</string>
@@ -152,6 +165,9 @@
     <string name="task_title_blank">名称不能为空</string>
     <string name="task_title_too_long">名称过长(最多 %1$d 字)</string>
     <string name="task_delete_confirm">将删除任务,已记录的 %1$d 分钟会保留为未绑定</string>
+    <plurals name="task_delete_confirm_clocks">
+        <item quantity="other">将删除任务,已记录的 %1$d 分钟会保留为未绑定;它的 %2$d 个专属时钟会转为通用时钟</item>
+    </plurals>
     <string name="task_delete">删除任务</string>
     <string name="task_drag">长按拖动排序</string>
     <string name="task_done_at">完成于 %1$s</string>
@@ -159,4 +175,16 @@
     <string name="task_unbound">未绑定任务</string>
     <string name="task_picker_title">选择任务</string>
     <string name="task_picker_unbind">不绑定</string>
+    <!-- task clocks (v2.2): clock chips on a task card -->
+    <string name="task_add_clock">添加时钟</string>
+    <string name="task_clock_legend">无边框 = 专属时钟,淡色 = 通用时钟</string>
+    <string name="task_clock_name_taken">该任务下已有同名时钟,换个名字</string>
+    <!-- 计时卡(v2.2 Task 4):「任务 · 时钟」横带 + 换时钟确认 -->
+    <string name="timer_chip_pair">%1$s · %2$s</string>
+    <string name="timer_picker_title">任务与时钟</string>
+    <string name="clock_section_label">时钟</string>
+    <string name="clock_group_generic">通用时钟</string>
+    <string name="clock_group_specific">任务专属时钟</string>
+    <string name="clock_switch_title">换时钟</string>
+    <string name="clock_switch_confirm">终止当前并开始新的?</string>
 </resources>

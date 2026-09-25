@@ -32,8 +32,8 @@ class ReportViewModelTest {
 
     @Test fun weeklySundayIncludesWholeIsoWeek() = runTest {
         val g = graph("week_sun")
-        val a = g.profileRepo.create("番茄", 25, 5)
-        val b = g.profileRepo.create("深度", 50, 10)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
+        val b = g.profileRepo.create("深度", 50, 10)!!
         g.totalsRepo.addWork("2026-08-31", a, 60 * 60_000L) // 周一
         g.totalsRepo.addWork("2026-09-05", a, 60 * 60_000L) // 周六
         g.totalsRepo.addWork("2026-09-05", b, 30 * 60_000L)
@@ -50,7 +50,7 @@ class ReportViewModelTest {
 
     @Test fun weeklyMondayStartsAtToday() = runTest {
         val g = graph("week_mon")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         g.totalsRepo.addWork("2026-08-31", a, 60 * 60_000L)
         g.totalsRepo.addWork("2026-08-30", a, 60 * 60_000L) // 上周日:界外
         val v = vm(g, "2026-08-31")
@@ -61,8 +61,8 @@ class ReportViewModelTest {
 
     @Test fun monthlyAggregatesByWeekWithTailClippedToToday() = runTest {
         val g = graph("month_bucket")
-        val a = g.profileRepo.create("番茄", 25, 5)
-        val b = g.profileRepo.create("深度", 50, 10)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
+        val b = g.profileRepo.create("深度", 50, 10)!!
         g.totalsRepo.addWork("2026-09-02", a, 60 * 60_000L)
         g.totalsRepo.addWork("2026-09-10", a, 30 * 60_000L)
         g.totalsRepo.addWork("2026-09-25", b, 45 * 60_000L)
@@ -81,7 +81,7 @@ class ReportViewModelTest {
 
     @Test fun monthlyExcludesPreviousMonth() = runTest {
         val g = graph("month_boundary")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         g.totalsRepo.addWork("2026-09-01", a, 30 * 60_000L)
         g.totalsRepo.addWork("2026-09-02", a, 15 * 60_000L)
         g.totalsRepo.addWork("2026-08-31", a, 60 * 60_000L) // 上月:界外
@@ -110,7 +110,7 @@ class ReportViewModelTest {
 
     @Test fun refreshAfterNewRecord() = runTest {
         val g = graph("live")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         g.totalsRepo.addWork("2026-09-01", a, 30 * 60_000L)
         val v = vm(g, "2026-09-06")
         v.refresh()
@@ -125,7 +125,7 @@ class ReportViewModelTest {
     @Test fun deletedProfileDisappearsFromTotals() = runTest {
         // v1.10.8:删除配置 -> 级联清段落/合计 -> 报表各时钟合计里不再出现该(或"已删除")行
         val g = graph("orphan")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         g.totalsRepo.addWork("2026-09-01", a, 60 * 60_000L)
         val v = vm(g, "2026-09-06")
         v.refresh()
@@ -142,7 +142,7 @@ class ReportViewModelTest {
 
     @Test fun autoRefreshShowsNewRecordWithoutExplicitRefresh() = runTest {
         val g = graph("auto_record")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         val v = vm(g, "2026-09-06")
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(0, v.ui.value.rows.size)
@@ -157,7 +157,7 @@ class ReportViewModelTest {
 
     @Test fun autoRefreshReResolvesRenamedProfile() = runTest {
         val g = graph("auto_rename")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         g.totalsRepo.addWork("2026-09-01", a, 30 * 60_000L)
         val v = vm(g, "2026-09-06") // 常驻 VM:先开报表后 footer 已含旧名
         shadowOf(Looper.getMainLooper()).idle()
@@ -172,7 +172,7 @@ class ReportViewModelTest {
 
     @Test fun autoRefreshDropsDeletedProfileTotals() = runTest {
         val g = graph("auto_orphan")
-        val a = g.profileRepo.create("番茄", 25, 5)
+        val a = g.profileRepo.create("番茄", 25, 5)!!
         g.totalsRepo.addWork("2026-09-01", a, 30 * 60_000L)
         val v = vm(g, "2026-09-06")
         shadowOf(Looper.getMainLooper()).idle()

@@ -60,13 +60,16 @@ class TimerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
+        // START / SWITCH_CLOCK 都是「马上就会有大快照」的命令:换时钟中途快照会瞬时为空,
+        // 标志位避免观察者把它当空闲收尾(脱前台 + 空闲通知 + stopSelf)
+        val starting = action == ACTION_START || action == ACTION_SWITCH_CLOCK
         if (action == ACTION_ACK) {
             // 通知"对号"确认:只清除提醒通知,不改计时状态
             TimerNotifIdle.cancel(this)
             return START_STICKY
         }
         com.goodnight.diag.DiagLog.add("Svc", "onStartCommand action=${action ?: "null(对账)"}")
-        if (action == ACTION_START) awaitingSnapshot = true
+        if (starting) awaitingSnapshot = true
         firstCommandReceived.complete(Unit)
         // 前台化纪律:异步处理前先同步前台化(无快照时用最小通知)
         startForegroundCompat(TimerNotifications.inProgressOrMinimal(this, g.engine.snapshot.value))
@@ -83,7 +86,7 @@ class TimerService : Service() {
                 coordinator.run(intent.toTimerCommand(action))
                 if (action == ACTION_STOP) awaitStopDrainedAndTearDown()
             } finally {
-                if (action == ACTION_START) awaitingSnapshot = false
+                if (starting) awaitingSnapshot = false
                 if (action == ACTION_STOP) stopDraining = false
             }
         }
@@ -104,12 +107,16 @@ class TimerService : Service() {
 
     override fun onBind(intent: Intent?) = null
 
-    /** 快照观察:活跃 → 前台化(标题带任务名);空闲 → 脱离前台并保留空闲常驻通知后自停 */
+    /** 快照观察:活跃 → 前台化(标题带任务名/时钟名);空闲 → 脱离前台并保留空闲常驻通知后自停 */
     private suspend fun onSnapshot(snap: com.goodnight.timer.RuntimeSnapshot?) {
         runCatching {
             when {
                 snap != null -> startForegroundCompat(
-                    TimerNotifications.inProgress(this, snap, coordinator.notifier.titleFor(snap)),
+                    TimerNotifications.inProgress(
+                        this, snap,
+                        coordinator.notifier.titleFor(snap),
+                        coordinator.notifier.clockFor(snap),
+                    ),
                 )
                 awaitingSnapshot || stopDraining -> Unit
                 else -> tearDownToIdle()
@@ -117,6 +124,13 @@ class TimerService : Service() {
         }.onFailure { Log.w(TAG, "snapshot handler failed for $snap", it) }
     }
 
+    /**
+     * 空闲收尾:脱离前台 + 空闲通知 + stopSelf。
+     *
+     * 投递归属(复审修复):本函数负责「计时 → 空闲」那一瞬的 showIdle;管理页删/归档后的
+     * 补投归 `ui.settings.deleteProfiles`。两处的 showIdle 都是读当前活跃列表后**幂等重投**,
+     * 谁后投都对(同一份数据算出来的同一张通知);因此不存在「两侧都以为对方会投」的空档。
+     */
     private fun tearDownToIdle() {
         com.goodnight.diag.DiagLog.add("Svc", "空闲收尾：脱离前台 + 空闲通知 + stopSelf")
         stopForeground(STOP_FOREGROUND_DETACH)

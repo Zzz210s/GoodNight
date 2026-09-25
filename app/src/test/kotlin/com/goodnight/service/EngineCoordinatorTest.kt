@@ -80,6 +80,43 @@ class EngineCoordinatorTest {
         assertNull("「不绑定」= 清空运行态绑定", g.engine.snapshot.value!!.taskId)
     }
 
+    /**
+     * v2.2 Task 3:START 可自带任务 id —— 任务卡片「点 chip 即开始」= 一条命令在同一把锁内
+     * 「起画 + 绑定任务」。分两条 intent(start 再 set_task)下发会有顺序竞态:set_task 若先到,
+     * 空闲态(无快照)会被 `engine.setTask` 静默吞掉,绑定就丢了。
+     */
+    @Test fun startCommandCanBindTaskAtomically() = runBlocking {
+        val g = graphFor("coord_start_binds_task")
+        g.coordinator.run(
+            TimerCommand(ACTION_START, profileId = 1L, workMillis = 60_000L, restMillis = 30_000L, taskId = 7L),
+        )
+        val s = g.engine.snapshot.value!!
+        assertEquals(EngineStatus.RUNNING, s.status)
+        assertEquals(7L, s.taskId)
+        assertTrue("首次绑定 = 定义整段,不产生段内切点", s.taskCuts.isEmpty())
+    }
+
+    /**
+     * v2.2 Task 3 修复:运行中收到「自带 taskId 的 START」时,`engine.start` 是 no-op,
+     * 但**不得跟着 setTask** —— 否则会给正在运行的那一段静默改归属(段内生成 task 切点)。
+     * 可达场景:首页/通知的启动 Intent 与任务页点 chip 竞态到达,chip 那条后到。
+     */
+    @Test fun startWithTaskDoesNotRebindWhileTimerRuns() = runBlocking {
+        val g = graphFor("coord_start_ignored_when_running")
+        g.coordinator.run(TimerCommand(ACTION_START, profileId = 1L, workMillis = 60_000L, restMillis = 30_000L))
+        assertEquals(EngineStatus.RUNNING, g.engine.snapshot.value!!.status)
+
+        // 第二条 START 自带 taskId + 另一个时钟:不得启动、不得换归属
+        g.coordinator.run(
+            TimerCommand(ACTION_START, profileId = 2L, workMillis = 45 * 60_000L, restMillis = 15 * 60_000L, taskId = 7L),
+        )
+        val s = g.engine.snapshot.value!!
+        assertNull("运行中不得静默绑定任务", s.taskId)
+        assertEquals("也不得换时钟", 1L, s.profileId)
+        assertEquals(60_000L, s.workMillis)
+        assertTrue("不产生段内切点", s.taskCuts.isEmpty())
+    }
+
     /** 到期推进:WORK -> REST;再调一次幂等(不重复推进) */
     @Test fun advanceIfExpiredIsIdempotent() = runBlocking {
         val g = graphFor("coord_advance")

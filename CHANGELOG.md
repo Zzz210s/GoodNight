@@ -7,6 +7,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/); versions fol
 ## [Unreleased]
 - Trunk-based branch model + GitHub Actions CI (test gate + tag-driven release publishing).
 
+## [2.2.0] - 2026-09-25
+### Added
+- **Clocks belong to tasks**: a clock is either shared (usable by every task) or exclusive to one task. The
+  clock management page is split into a shared section plus one section per task that owns clocks, and a clock
+  created from a task card lands in that task's section. Names must be unique inside a scope: the shared section
+  or one task.
+- **Start straight from the task card**: tapping a clock chip on a task card starts the timer bound to that task
+  in one command — the chip picks the clock and the binding together, with no second tap.
+- **The timer card shows "task · clock"**; switching the clock mid-run asks for confirmation first, settles the
+  old segment into the record, and starts the new one bound to the same task.
+- **The report "by task" rows expand into per-clock detail**: opening a task row lists the time and session
+  count of every clock used on it (the share is within that task).
+- **Deleting a clock no longer erases its record**: a clock that has history — or that is currently in use —
+  is archived instead; it leaves the management page and the pickers while its name and time stay visible in
+  reports and the daily detail. A clock with no history is still deleted for real.
+- **Deleting a task hands its clocks back to the shared section** (a name already taken in the shared section
+  gets a suffix), so their recorded time stays reachable from the normal clock list.
+- **Backup format v3** (v1 and v2 files still import): every clock carries its owning task, so a restore
+  rebuilds the same grouping.
+
+### Notes
+- An archived clock cannot be picked for new runs; its history still appears in every report and in the daily
+  detail.
+
 ## [2.1.0] - 2026-09-24
 ### Added
 - **Tasks, and a focus run can be bound to one**: a task page (create, rename, complete, long-press drag to
