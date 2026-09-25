@@ -1,13 +1,22 @@
 package com.goodnight.ui.tasks
 
 import androidx.lifecycle.viewModelScope
+import com.goodnight.R
 import kotlinx.coroutines.launch
 
 /**
  * 删除确认载荷:[minutes] = 该任务已记录的分钟数(四舍五入到整分)= 已落库段落 + **在途工作段**
- * (运行中删当前绑定任务时本段尚未落库,见 [inFlightMillisFor])。
+ * (运行中删当前绑定任务时本段尚未落库,见 [inFlightMillisFor]);
+ * [clocks] = 该任务专属时钟数(v2.2 Task 7 起确认框要讲清它们的去向)。
  */
-data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long)
+data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long, val clocks: Int)
+
+/**
+ * 确认框正文资源:只有真有时钟会被转成通用时才追加那句(v2.2 Task 7)。
+ * 抽成函数是为了让「有/无专属时钟」两条分支都能被单测钉住(TaskDialogs 本身是 Compose 树)。
+ */
+internal fun deleteConfirmTextRes(clocks: Int): Int =
+    if (clocks > 0) R.string.task_delete_confirm_clocks else R.string.task_delete_confirm
 
 /**
  * v2.1 Task 6 / v2.2 Task 4:任务删除与「已记录的 N 分钟」口径。
@@ -21,7 +30,9 @@ data class TaskDeletePrompt(val id: Long, val title: String, val minutes: Long)
 internal fun TaskListViewModel.onDeleteRequest(id: Long) {
     viewModelScope.launch {
         val title = graph.taskRepo.titleById(id) ?: return@launch
-        deletePromptState.value = TaskDeletePrompt(id, title, recordedMinutes(id))
+        // 时钟数一并取:删除事务会把该任务专属时钟转通用(TaskRepository.deleteTask),
+        // 只在弹窗文案里讲清去向,不做任何预判/预改
+        deletePromptState.value = TaskDeletePrompt(id, title, recordedMinutes(id), graph.profileRepo.countByTask(id))
     }
 }
 

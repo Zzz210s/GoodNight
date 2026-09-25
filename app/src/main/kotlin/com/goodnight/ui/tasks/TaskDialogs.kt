@@ -64,13 +64,18 @@ internal fun TaskInputDialog(
     )
 }
 
-/** 删除确认:标题即被删任务名(用户要知道删的是哪个),文案含该任务已记录的分钟数(时间账保留为未绑定) */
+/**
+ * 删除确认:标题即被删任务名(用户要知道删的是哪个),文案含该任务已记录的分钟数(时间账保留为未绑定);
+ * v2.2 Task 7:该任务有专属时钟时追加一句「会转为通用时钟」([deleteConfirmTextRes] 按数量选资源)。
+ */
 @Composable
 internal fun TaskDeleteDialog(prompt: TaskDeletePrompt, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(prompt.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        text = { Text(stringResource(R.string.task_delete_confirm, prompt.minutes)) },
+        text = {
+            Text(stringResource(deleteConfirmTextRes(prompt.clocks), prompt.minutes, prompt.clocks))
+        },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)

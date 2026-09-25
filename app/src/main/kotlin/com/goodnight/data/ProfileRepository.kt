@@ -128,6 +128,9 @@ class ProfileRepository(
         }
     }
 
+    /** v2.2 Task 7:该任务的专属时钟数(删除确认文案告诉用户「它们会转为通用时钟」) */
+    suspend fun countByTask(taskId: Long): Int = dao.countByTask(taskId)
+
     /**
      * v2.2:裸删(不分引用情况),仅保留给「全量重置/导入前清库」等既有路径;
      * 管理页删除请走 [removeOrArchive],否则会留下悬空的 profileId。

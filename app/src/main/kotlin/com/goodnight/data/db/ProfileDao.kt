@@ -51,6 +51,9 @@ interface ProfileDao {
     @Query("UPDATE profile SET taskId = :taskId WHERE id = :id")
     suspend fun moveTo(id: Long, taskId: Long?)
 
+    /** v2.2 Task 7:该任务的专属时钟数(含归档行 —— 删任务时它们同样会被置为通用) */
+    @Query("SELECT COUNT(*) FROM profile WHERE taskId = :taskId") suspend fun countByTask(taskId: Long): Int
+
     /** 删除任务时把专属时钟转通用(行保留:时间账与时钟设置都不丢);名字由调用方去重后传入 */
     @Query("SELECT * FROM profile WHERE taskId = :taskId ORDER BY createdAt, id")
     suspend fun getByTask(taskId: Long): List<ProfileEntity>

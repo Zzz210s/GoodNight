@@ -165,6 +165,7 @@
     <string name="task_title_blank">Name cannot be empty</string>
     <string name="task_title_too_long">Name too long (max %1$d characters)</string>
     <string name="task_delete_confirm">Delete this task? Its %1$d recorded minutes stay as unbound</string>
+    <string name="task_delete_confirm_clocks">Delete this task? Its %1$d recorded minutes stay as unbound; its %2$d dedicated clocks become generic clocks</string>
     <string name="task_delete">Delete task</string>
     <string name="task_drag">Long press and drag to reorder</string>
     <string name="task_done_at">Completed %1$s</string>
