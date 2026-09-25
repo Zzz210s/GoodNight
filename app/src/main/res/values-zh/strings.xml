@@ -115,6 +115,9 @@
     <!-- report by task (v2.1) -->
     <string name="report_by_task">按任务</string>
     <string name="report_task_meta">%1$d 次 · %2$d%%</string>
+    <!-- report clock detail (v2.2) -->
+    <string name="report_clock_unknown">未知时钟</string>
+    <string name="report_clock_details">时钟明细</string>
     <string name="color_theme">配色</string>
     <string name="pack_ember">经典橙</string>
     <string name="pack_green">浅绿</string>

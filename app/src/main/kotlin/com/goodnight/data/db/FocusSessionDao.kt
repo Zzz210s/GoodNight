@@ -56,7 +56,20 @@ interface FocusSessionDao {
             "WHERE startAt >= :startMs AND startAt < :endMs GROUP BY taskId"
     )
     suspend fun taskTotalsBetween(startMs: Long, endMs: Long): List<TaskTotalRow>
+
+    /**
+     * v2.2 Task 6:窗口内按「任务 × 时钟」分组取时长与段数(过滤口径与 [taskTotalsBetween] 逐字一致),
+     * 供报表「按任务」区块展开出各时钟明细。taskId 为 NULL = 未绑定任务。
+     */
+    @Query(
+        "SELECT taskId, profileId, SUM(endAt - startAt) AS millis, COUNT(*) AS count FROM focus_session " +
+            "WHERE startAt >= :startMs AND startAt < :endMs GROUP BY taskId, profileId"
+    )
+    suspend fun taskProfileTotalsBetween(startMs: Long, endMs: Long): List<TaskProfileTotalRow>
 }
 
 /** v2.1 Task 8:按 taskId 分组的聚合行(`taskId` 为 null = 未绑定) */
 data class TaskTotalRow(val taskId: Long?, val millis: Long, val count: Int)
+
+/** v2.2 Task 6:按「taskId × profileId」分组的细行(`taskId` 为 null = 未绑定任务) */
+data class TaskProfileTotalRow(val taskId: Long?, val profileId: Long, val millis: Long, val count: Int)
