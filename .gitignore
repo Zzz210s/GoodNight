@@ -1,22 +1,17 @@
-# AI 运行文件(全局规则:永不上传远程仓库)
-docs/superpowers/
+target/
+**/target/
+*.exe
+*.pdb
+.claude/
+.cursor/
+.omp/
+.ccto/
 .superpowers/
 .verify/
-.emu*.log
-*.emu*.log
-.claude/
-.ccto/
-.aider*
-.cursor/
-.codegraph/
-*.local
-
-# Android
-.gradle/
-build/
-local.properties
-.idea/
-*.iml
-captures/
-.superpowers/
+AGENTS.md
+CLAUDE.md
 *.keystore
+local.properties
+.gradle/
+.idea/
+.kotlin/

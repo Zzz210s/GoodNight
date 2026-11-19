@@ -1,0 +1,202 @@
+// 计划页:周 / 月 / Deadline 三个分区,单分区列表 + 就地新增。
+
+import { Theme, PlanRow } from "types.slint";
+
+component SectionChip inherits Rectangle {
+    in property <int> index;
+    in property <string> label;
+    in property <bool> active;
+    callback picked();
+
+    height: 30px;
+    width: chip-text.preferred-width + 24px;
+    border-radius: 15px;
+    border-width: 1px;
+    border-color: root.active ? Theme.ink : Theme.line;
+    background: root.active ? Theme.ink : Theme.card;
+
+    chip-text := Text {
+        text: root.label;
+        color: root.active ? #ffffff : Theme.ink-2;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        clicked => { root.picked(); }
+    }
+}
+
+component PlanLine inherits Rectangle {
+    in property <string> title;
+    in property <bool> done;
+    in property <color> accent;
+    callback toggled();
+    callback removed();
+
+    height: 44px;
+    border-radius: 12px;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.line;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 8px;
+        spacing: 10px;
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            border-width: 1px;
+            border-color: root.done ? Theme.ink : Theme.line;
+            background: root.done ? Theme.ink : transparent;
+            TouchArea {
+                clicked => { root.toggled(); }
+            }
+        }
+
+        Rectangle {
+            width: 3px;
+            border-radius: 2px;
+            background: root.accent;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+            line-text := Text {
+                text: root.title;
+                color: root.done ? Theme.muted : Theme.ink;
+                font-size: 14px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            TouchArea {
+                clicked => { root.toggled(); }
+            }
+        }
+
+        Rectangle {
+            width: 28px;
+            background: transparent;
+            Text {
+                text: "×";
+                color: Theme.muted;
+                font-size: 16px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.removed(); }
+            }
+        }
+    }
+}
+
+export component PlanPage inherits Rectangle {
+    background: transparent;
+
+    in-out property <int> section: 0;
+    in property <string> summary: "";
+    in-out property <string> draft: "";
+    in property <[PlanRow]> rows: [];
+
+    callback set-section(int);
+    callback add(string);
+    callback toggle(string);
+    callback remove(string);
+
+    VerticalLayout {
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            SectionChip {
+                index: 0;
+                label: "周计划";
+                active: root.section == 0;
+                picked => { root.set-section(0); }
+            }
+            SectionChip {
+                index: 1;
+                label: "月计划";
+                active: root.section == 1;
+                picked => { root.set-section(1); }
+            }
+            SectionChip {
+                index: 2;
+                label: "Deadline";
+                active: root.section == 2;
+                picked => { root.set-section(2); }
+            }
+        }
+
+        Text {
+            text: root.summary;
+            color: Theme.muted;
+            font-size: 12px;
+        }
+
+        if root.rows.length == 0 : Text {
+            text: "还没有条目,下面加一条";
+            color: Theme.muted;
+            font-size: 13px;
+        }
+
+        for row in root.rows : PlanLine {
+            title: row.title;
+            done: row.done;
+            accent: row.color;
+            toggled => { root.toggle(row.id); }
+            removed => { root.remove(row.id); }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 40px;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: Theme.line;
+                background: Theme.card;
+
+                input := TextInput {
+                    x: 12px;
+                    width: parent.width - 24px;
+                    height: parent.height;
+                    text <=> root.draft;
+                    color: Theme.ink;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                    single-line: true;
+                }
+            }
+
+            Rectangle {
+                width: 64px;
+                height: 40px;
+                border-radius: 12px;
+                background: root.draft == "" ? #b9b8b1 : Theme.ink;
+                Text {
+                    text: "添加";
+                    color: #ffffff;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    clicked => { root.add(input.text); }
+                }
+            }
+        }
+    }
+}

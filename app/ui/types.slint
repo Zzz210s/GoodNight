@@ -1,0 +1,52 @@
+// 共享类型与配色。
+
+export global Theme {
+    out property <color> ink: #0b0b0b;
+    out property <color> ink-2: #52514e;
+    out property <color> muted: #898781;
+    out property <color> line: #e1e0d9;
+    out property <color> card: #fcfcfb;
+    out property <color> page: #f9f9f7;
+    out property <color> warn: #eb6834;
+    out property <color> danger: #d03b3b;
+    out property <color> scrim: #0b0b0b99;
+}
+
+export struct CategoryData {
+    id: string,
+    label: string,
+    color: color,
+}
+
+export struct TimelineRow {
+    key: string,
+    label: string,
+    color: color,
+    time: string,
+    duration: string,
+}
+
+export struct DonutSlice {
+    path: string,
+    color: color,
+}
+
+export struct CategoryRow {
+    id: string,
+    label: string,
+    color: color,
+    amount: string,
+    percent: string,
+}
+
+export struct HeatCell {
+    level: int,
+    color: color,
+}
+
+export struct PlanRow {
+    id: string,
+    title: string,
+    done: bool,
+    color: color,
+}

@@ -1,0 +1,478 @@
+// Tally 主窗口:计时页 + 记录弹层,计划页与分析页拆到单独文件。
+
+import { Theme, CategoryData, CategoryRow, DonutSlice, HeatCell, PlanRow, TimelineRow } from "types.slint";
+import { PlanPage } from "plan.slint";
+import { StatsPage } from "stats.slint";
+
+export component MainWindow inherits Window {
+    title: "Tally";
+    preferred-width: 420px;
+    preferred-height: 640px;
+    min-width: 360px;
+    min-height: 560px;
+    background: Theme.page;
+
+    in-out property <string> date-label: "11月10日 周二";
+    in-out property <string> status-label: "准备开始";
+    in-out property <string> elapsed-label: "00:00:00";
+    in-out property <string> hint-label: "准备好后开始";
+    in-out property <string> button-label: "开始";
+    in-out property <bool> running: false;
+    in-out property <int> target-minutes: 0;
+    in-out property <string> remain-label: "";
+    in-out property <bool> over-target: false;
+    in-out property <int> tab: 0;
+
+    // 记录弹层
+    in-out property <bool> sheet-visible: false;
+    in-out property <string> sheet-error: "";
+    in-out property <string> sheet-range: "";
+    in-out property <string> draft-activity: "";
+    in-out property <string> draft-category: "other";
+    in-out property <bool> creating-category: false;
+    in-out property <string> new-category-name: "";
+    in-out property <[CategoryData]> categories: [];
+    in-out property <[[CategoryData]]> category-rows: [];
+
+    // 分析页
+    in-out property <int> stats-period: 0;
+    in-out property <string> stats-range: "";
+    in-out property <string> stats-total: "0分";
+    in-out property <string> stats-study: "0分";
+    in-out property <int> stats-percent: 0;
+    in-out property <[DonutSlice]> donut-slices: [];
+    in-out property <[CategoryRow]> cat-summary: [];
+    in-out property <[TimelineRow]> stats-entries: [];
+    in-out property <[[HeatCell]]> heat-weeks: [];
+    in-out property <string> heat-stats: "";
+
+    // 计划页
+    in-out property <int> plan-section: 0;
+    in-out property <string> plan-summary: "";
+    in-out property <string> plan-draft: "";
+    in-out property <[PlanRow]> plan-rows: [];
+
+    callback start-stop();
+    callback cycle-target();
+    callback set-tab(int);
+    callback save-session(string, string);
+    callback discard-session();
+    callback select-category(string);
+    callback start-new-category();
+    callback submit-new-category(string);
+    callback cancel-new-category();
+    callback set-stats-period(int);
+    callback shift-stats(int);
+    callback set-plan-section(int);
+    callback add-plan(string);
+    callback toggle-plan(string);
+    callback remove-plan(string);
+
+    VerticalLayout {
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 18px;
+        padding-bottom: 4px;
+        spacing: 0px;
+
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Tally";
+                color: Theme.ink;
+                font-size: 20px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: root.date-label;
+                color: Theme.muted;
+                font-size: 13px;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.tab == 0 : VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 10px;
+            alignment: center;
+
+            Text {
+                text: root.status-label;
+                color: Theme.ink-2;
+                font-size: 13px;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: root.elapsed-label;
+                color: Theme.ink;
+                font-size: 60px;
+                font-weight: 300;
+                horizontal-alignment: center;
+            }
+
+            if root.remain-label != "" : Text {
+                text: root.remain-label;
+                color: root.over-target ? Theme.warn : Theme.ink-2;
+                font-size: 15px;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: root.hint-label;
+                color: Theme.muted;
+                font-size: 13px;
+                horizontal-alignment: center;
+            }
+
+            Rectangle {
+                height: 32px;
+                width: target-row.preferred-width + 28px;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: root.target-minutes > 0 ? Theme.ink-2 : Theme.line;
+                background: Theme.card;
+
+                target-row := Text {
+                    text: root.target-minutes > 0 ? "目标 " + root.target-minutes + " 分钟" : "设定目标";
+                    color: root.target-minutes > 0 ? Theme.ink-2 : Theme.muted;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    clicked => { root.cycle-target(); }
+                }
+            }
+        }
+
+        if root.tab == 1 : Rectangle {
+            vertical-stretch: 1;
+            background: transparent;
+            PlanPage {
+                section <=> root.plan-section;
+                summary: root.plan-summary;
+                draft <=> root.plan-draft;
+                rows: root.plan-rows;
+                set-section(index) => { root.set-plan-section(index); }
+                add(title) => { root.add-plan(title); }
+                toggle(id) => { root.toggle-plan(id); }
+                remove(id) => { root.remove-plan(id); }
+            }
+        }
+
+        if root.tab == 2 : Rectangle {
+            vertical-stretch: 1;
+            background: transparent;
+            StatsPage {
+                period <=> root.stats-period;
+                range-label: root.stats-range;
+                total-text: root.stats-total;
+                study-text: root.stats-study;
+                study-percent: root.stats-percent;
+                slices: root.donut-slices;
+                categories: root.cat-summary;
+                entries: root.stats-entries;
+                heat-weeks: root.heat-weeks;
+                heat-stats: root.heat-stats;
+                set-period(index) => { root.set-stats-period(index); }
+                shift(delta) => { root.shift-stats(delta); }
+            }
+        }
+
+        if root.tab == 0 : Rectangle {
+            height: 54px;
+            border-radius: 27px;
+            background: Theme.ink;
+
+            Text {
+                text: root.button-label;
+                color: #ffffff;
+                font-size: 16px;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => { root.start-stop(); }
+            }
+        }
+
+        HorizontalLayout {
+            height: 52px;
+            alignment: center;
+            spacing: 48px;
+
+            Rectangle {
+                width: tab-timer.preferred-width + 8px;
+                height: 52px;
+                background: transparent;
+                tab-timer := Text {
+                    text: "计时";
+                    color: root.tab == 0 ? Theme.ink : Theme.muted;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.set-tab(0); } }
+            }
+
+            Rectangle {
+                width: tab-plan.preferred-width + 8px;
+                height: 52px;
+                background: transparent;
+                tab-plan := Text {
+                    text: "计划";
+                    color: root.tab == 1 ? Theme.ink : Theme.muted;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.set-tab(1); } }
+            }
+
+            Rectangle {
+                width: tab-stats.preferred-width + 8px;
+                height: 52px;
+                background: transparent;
+                tab-stats := Text {
+                    text: "分析";
+                    color: root.tab == 2 ? Theme.ink : Theme.muted;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.set-tab(2); } }
+            }
+        }
+    }
+
+    // 记录弹层
+    if root.sheet-visible : Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        background: Theme.scrim;
+
+        TouchArea { clicked => { } }
+
+        VerticalLayout {
+            alignment: end;
+
+            Rectangle {
+                width: root.width;
+                background: Theme.card;
+                border-radius: 24px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "记录这段时间";
+                        color: Theme.ink;
+                        font-size: 16px;
+                        font-weight: 600;
+                    }
+                    Text {
+                        text: root.sheet-range;
+                        color: Theme.muted;
+                        font-size: 12px;
+                    }
+
+                    Text {
+                        text: "活动内容";
+                        color: Theme.ink-2;
+                        font-size: 12px;
+                    }
+
+                    Rectangle {
+                        height: 44px;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: Theme.line;
+                        background: Theme.page;
+
+                        activity := TextInput {
+                            x: 12px;
+                            width: parent.width - 24px;
+                            height: parent.height;
+                            text <=> root.draft-activity;
+                            color: Theme.ink;
+                            font-size: 15px;
+                            vertical-alignment: center;
+                            single-line: true;
+                        }
+                    }
+
+                    Text {
+                        text: "分类";
+                        color: Theme.ink-2;
+                        font-size: 12px;
+                    }
+
+                    VerticalLayout {
+                        spacing: 8px;
+                        for row in root.category-rows : HorizontalLayout {
+                            spacing: 8px;
+                            for cat in row : Rectangle {
+                                height: 32px;
+                                width: cat-label.preferred-width + 40px;
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: root.draft-category == cat.id ? Theme.ink : Theme.line;
+                                background: root.draft-category == cat.id ? Theme.ink : Theme.card;
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    spacing: 6px;
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 8px;
+                                        height: 8px;
+                                        border-radius: 4px;
+                                        background: cat.color;
+                                    }
+                                    cat-label := Text {
+                                        text: cat.label;
+                                        color: root.draft-category == cat.id ? #ffffff : Theme.ink-2;
+                                        font-size: 13px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                TouchArea {
+                                    clicked => { root.select-category(cat.id); }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.creating-category : HorizontalLayout {
+                        spacing: 8px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: 40px;
+                            border-radius: 12px;
+                            border-width: 1px;
+                            border-color: Theme.line;
+                            background: Theme.page;
+                            new-cat := TextInput {
+                                x: 12px;
+                                width: parent.width - 24px;
+                                height: parent.height;
+                                text <=> root.new-category-name;
+                                color: Theme.ink;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                                single-line: true;
+                            }
+                        }
+                        Rectangle {
+                            width: 56px;
+                            height: 40px;
+                            border-radius: 12px;
+                            background: Theme.ink;
+                            Text {
+                                text: "添加";
+                                color: #ffffff;
+                                font-size: 13px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                clicked => { root.submit-new-category(new-cat.text); }
+                            }
+                        }
+                        Rectangle {
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 12px;
+                            background: transparent;
+                            Text {
+                                text: "取消";
+                                color: Theme.muted;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                clicked => { root.cancel-new-category(); }
+                            }
+                        }
+                    }
+
+                    if !root.creating-category : Rectangle {
+                        height: 32px;
+                        width: new-chip.preferred-width + 32px;
+                        border-radius: 16px;
+                        border-width: 1px;
+                        border-color: Theme.line;
+                        background: transparent;
+
+                        new-chip := Text {
+                            text: "+ 新分类";
+                            color: Theme.muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => { root.start-new-category(); }
+                        }
+                    }
+
+                    if root.sheet-error != "" : Text {
+                        text: root.sheet-error;
+                        color: Theme.danger;
+                        font-size: 12px;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        alignment: end;
+
+                        Rectangle {
+                            width: 76px;
+                            height: 40px;
+                            border-radius: 20px;
+                            border-width: 1px;
+                            border-color: Theme.line;
+                            Text {
+                                text: "丢弃";
+                                color: Theme.ink-2;
+                                font-size: 14px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            TouchArea { clicked => { root.discard-session(); } }
+                        }
+
+                        Rectangle {
+                            width: 92px;
+                            height: 40px;
+                            border-radius: 20px;
+                            background: root.draft-activity == "" ? #b9b8b1 : Theme.ink;
+                            Text {
+                                text: "保存";
+                                color: #ffffff;
+                                font-size: 14px;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                clicked => { root.save-session(activity.text, root.draft-category); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

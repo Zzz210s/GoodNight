@@ -1,0 +1,19 @@
+[workspace]
+members = ["core", "app"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[patch.crates-io]
+# 本机杀软会隔离上游 rustversion 的构建脚本,改用本地等价实现
+rustversion = { path = "vendor/rustversion" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

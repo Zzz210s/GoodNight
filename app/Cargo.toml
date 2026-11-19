@@ -1,0 +1,19 @@
+[package]
+name = "tally-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tally 的 Rust + Slint 界面(Windows / Android 共用)"
+
+[[bin]]
+name = "tally"
+path = "src/main.rs"
+
+[dependencies]
+tally-core = { path = "../core" }
+slint = { version = "1", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "compat-1-2"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+slint-build = "1"

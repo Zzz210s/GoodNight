@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- v1.9.13 #42:launcher 图标改简约非透明 —— 浅暖底,区别于旧深灰底 -->
-    <color name="ic_launcher_background">#FFF3E9</color>
-</resources>

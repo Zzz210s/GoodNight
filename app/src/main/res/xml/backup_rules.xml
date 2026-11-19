@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- v1.9.11 云备份规则(API30 及以下):备份用户数据(时钟/累计/时段)。 -->
-<full-backup-content>
-    <include domain="database" path="." />
-    <include domain="sharedpref" path="." />
-    <include domain="file" path="." />
-</full-backup-content>
