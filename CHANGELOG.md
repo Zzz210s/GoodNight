@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Versions follow [SemVer](https://semver.org/).
 
+## 3.0.1
+
+### Changed
+
+- The heatmap is no longer a separate tab. Weekly view shows a seven-day intensity strip, monthly view shows a calendar grid; both use the same five intensity levels.
+
 ## 3.0.0
 
 Rewritten in Rust. The React Native / Kotlin implementation of 2.x remains at tag `v2.2.0`.

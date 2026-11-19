@@ -1,6 +1,6 @@
-// 分析页:今日 / 周 / 月 / 热力图。环形图路径由 Rust 算好,这里只画。
+// 分析页:今日 / 周 / 月。周与月的日历强度直接画在页面里,没有独立的热力图页。
 
-import { Theme, CategoryRow, DonutSlice, HeatCell, TimelineRow } from "types.slint";
+import { Theme, CategoryRow, DonutSlice, RangeCell, TimelineRow } from "types.slint";
 
 component PeriodChip inherits Rectangle {
     in property <int> index;
@@ -28,6 +28,33 @@ component PeriodChip inherits Rectangle {
     }
 }
 
+component DayCell inherits Rectangle {
+    in property <string> label;
+    in property <string> hint;
+    in property <color> fill;
+    in property <color> ink;
+
+    background: root.fill;
+    border-radius: 8px;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 0px;
+        Text {
+            text: root.label;
+            color: root.ink;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.hint;
+            color: root.ink;
+            font-size: 10px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
 export component StatsPage inherits Rectangle {
     background: transparent;
 
@@ -36,34 +63,34 @@ export component StatsPage inherits Rectangle {
     in property <string> total-text: "0分";
     in property <string> study-text: "0分";
     in property <int> study-percent: 0;
+    in property <string> range-note: "";
     in property <[DonutSlice]> slices: [];
     in property <[CategoryRow]> categories: [];
     in property <[TimelineRow]> entries: [];
-    in property <[[HeatCell]]> heat-weeks: [];
-    in property <string> heat-stats: "";
+    in property <[RangeCell]> week-cells: [];
+    in property <[[RangeCell]]> month-rows: [];
 
     callback set-period(int);
     callback shift(int);
 
     VerticalLayout {
-        spacing: 10px;
+        spacing: 8px;
 
         HorizontalLayout {
             spacing: 6px;
             PeriodChip { index: 0; label: "今日"; active: root.period == 0; picked => { root.set-period(0); } }
             PeriodChip { index: 1; label: "周"; active: root.period == 1; picked => { root.set-period(1); } }
             PeriodChip { index: 2; label: "月"; active: root.period == 2; picked => { root.set-period(2); } }
-            PeriodChip { index: 3; label: "热力图"; active: root.period == 3; picked => { root.set-period(3); } }
         }
 
-        if root.period != 3 : HorizontalLayout {
+        HorizontalLayout {
             spacing: 6px;
-            height: 24px;
+            height: 22px;
 
             Rectangle {
-                width: 22px;
+                width: 20px;
                 background: transparent;
-                Text { text: "‹"; color: Theme.muted; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                Text { text: "‹"; color: Theme.muted; font-size: 15px; horizontal-alignment: center; vertical-alignment: center; }
                 TouchArea { clicked => { root.shift(-1); } }
             }
             Text {
@@ -75,83 +102,113 @@ export component StatsPage inherits Rectangle {
                 horizontal-stretch: 1;
             }
             Rectangle {
-                width: 22px;
+                width: 20px;
                 background: transparent;
-                Text { text: "›"; color: Theme.muted; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                Text { text: "›"; color: Theme.muted; font-size: 15px; horizontal-alignment: center; vertical-alignment: center; }
                 TouchArea { clicked => { root.shift(1); } }
             }
         }
 
-        if root.period == 3 : VerticalLayout {
-            vertical-stretch: 1;
-            spacing: 10px;
-            alignment: start;
+        // 环形图 + 摘要
+        HorizontalLayout {
+            spacing: 12px;
+            height: 128px;
+            alignment: center;
 
-            Text {
-                text: root.heat-stats;
-                color: Theme.ink-2;
-                font-size: 12px;
-            }
-
-            HorizontalLayout {
-                spacing: 1px;
-                for week in root.heat-weeks : VerticalLayout {
-                    spacing: 1px;
-                    for cell in week : Rectangle {
-                        width: 5px;
-                        height: 5px;
-                        border-radius: 1px;
-                        background: cell.color;
-                    }
+            if root.slices.length > 0 : Rectangle {
+                width: 128px;
+                height: 128px;
+                background: transparent;
+                for slice in root.slices : Path {
+                    commands: slice.path;
+                    fill: slice.color;
                 }
             }
 
-            HorizontalLayout {
-                spacing: 6px;
-                Text { text: "少"; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-                Rectangle { width: 8px; height: 8px; border-radius: 2px; background: #eeece4; }
-                Rectangle { width: 8px; height: 8px; border-radius: 2px; background: #cfe3d4; }
-                Rectangle { width: 8px; height: 8px; border-radius: 2px; background: #9fc9a8; }
-                Rectangle { width: 8px; height: 8px; border-radius: 2px; background: #66a677; }
-                Rectangle { width: 8px; height: 8px; border-radius: 2px; background: #2f7a45; }
-                Text { text: "多"; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                spacing: 4px;
+
+                Text {
+                    text: "全部 " + root.total-text;
+                    color: Theme.ink;
+                    font-size: 15px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: "学习+工作 " + root.study-text + " · 占 " + root.study-percent + "%";
+                    color: Theme.ink-2;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.range-note;
+                    color: Theme.muted;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
             }
         }
 
-        if root.period != 3 : VerticalLayout {
-            vertical-stretch: 1;
-            spacing: 8px;
-
-            if root.slices.length == 0 : Text {
-                text: "这段时间还没有记录";
-                color: Theme.muted;
-                font-size: 13px;
-            }
-
+        // 周:一排七格
+        if root.period == 1 : VerticalLayout {
+            spacing: 4px;
             HorizontalLayout {
-                alignment: center;
-                if root.slices.length > 0 : Rectangle {
-                    width: 168px;
-                    height: 168px;
-                    background: transparent;
-                    for slice in root.slices : Path {
-                        commands: slice.path;
-                        fill: slice.color;
+                spacing: 4px;
+                for cell in root.week-cells : VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    Text {
+                        text: cell.label;
+                        color: Theme.muted;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                    }
+                    DayCell {
+                        height: 44px;
+                        label: cell.hint;
+                        hint: "";
+                        fill: cell.color;
+                        ink: cell.text-color;
                     }
                 }
             }
+        }
 
-            Text {
-                text: "全部 " + root.total-text + "  ·  学习+工作 " + root.study-text + "  ·  占 " + root.study-percent + "%";
-                color: Theme.ink-2;
-                font-size: 12px;
-                horizontal-alignment: center;
-                wrap: word-wrap;
+        // 月:按周对齐的日历
+        if root.period == 2 : VerticalLayout {
+            spacing: 3px;
+
+            HorizontalLayout {
+                spacing: 3px;
+                for name in ["一", "二", "三", "四", "五", "六", "日"] : Text {
+                    text: name;
+                    color: Theme.muted;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                    horizontal-stretch: 1;
+                }
             }
 
+            for row in root.month-rows : HorizontalLayout {
+                spacing: 3px;
+                for cell in row : DayCell {
+                    horizontal-stretch: 1;
+                    height: 34px;
+                    label: cell.label;
+                    hint: cell.hint;
+                    fill: cell.color;
+                    ink: cell.text-color;
+                }
+            }
+        }
+
+        if root.entries.length > 0 : VerticalLayout {
+            spacing: 2px;
             for row in root.entries : HorizontalLayout {
                 spacing: 8px;
-                height: 24px;
+                height: 22px;
 
                 Rectangle { width: 3px; border-radius: 2px; background: row.color; }
                 Text {
@@ -163,12 +220,15 @@ export component StatsPage inherits Rectangle {
                     horizontal-stretch: 1;
                 }
                 Text { text: row.time; color: Theme.muted; font-size: 11px; vertical-alignment: center; }
-                Text { text: row.duration; color: Theme.ink-2; font-size: 12px; vertical-alignment: center; width: 64px; horizontal-alignment: right; }
+                Text { text: row.duration; color: Theme.ink-2; font-size: 12px; vertical-alignment: center; width: 62px; horizontal-alignment: right; }
             }
+        }
 
+        if root.categories.length > 0 : VerticalLayout {
+            spacing: 2px;
             for row in root.categories : HorizontalLayout {
                 spacing: 8px;
-                height: 24px;
+                height: 22px;
 
                 Rectangle { width: 3px; border-radius: 2px; background: row.color; }
                 Text {
@@ -179,9 +239,13 @@ export component StatsPage inherits Rectangle {
                     horizontal-stretch: 1;
                     overflow: elide;
                 }
-                Text { text: row.percent; color: Theme.muted; font-size: 11px; vertical-alignment: center; width: 40px; horizontal-alignment: right; }
-                Text { text: row.amount; color: Theme.ink-2; font-size: 12px; vertical-alignment: center; width: 64px; horizontal-alignment: right; }
+                Text { text: row.percent; color: Theme.muted; font-size: 11px; vertical-alignment: center; width: 38px; horizontal-alignment: right; }
+                Text { text: row.amount; color: Theme.ink-2; font-size: 12px; vertical-alignment: center; width: 62px; horizontal-alignment: right; }
             }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
         }
     }
 }

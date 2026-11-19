@@ -1,6 +1,6 @@
 // Tally 主窗口:计时页 + 记录弹层,计划页与分析页拆到单独文件。
 
-import { Theme, CategoryData, CategoryRow, DonutSlice, HeatCell, PlanRow, TimelineRow } from "types.slint";
+import { Theme, CategoryData, CategoryRow, DonutSlice, PlanRow, RangeCell, TimelineRow } from "types.slint";
 import { PlanPage } from "plan.slint";
 import { StatsPage } from "stats.slint";
 
@@ -43,8 +43,9 @@ export component MainWindow inherits Window {
     in-out property <[DonutSlice]> donut-slices: [];
     in-out property <[CategoryRow]> cat-summary: [];
     in-out property <[TimelineRow]> stats-entries: [];
-    in-out property <[[HeatCell]]> heat-weeks: [];
-    in-out property <string> heat-stats: "";
+    in-out property <[RangeCell]> week-cells: [];
+    in-out property <[[RangeCell]]> month-rows: [];
+    in-out property <string> range-note: "";
 
     // 计划页
     in-out property <int> plan-section: 0;
@@ -176,8 +177,9 @@ export component MainWindow inherits Window {
                 slices: root.donut-slices;
                 categories: root.cat-summary;
                 entries: root.stats-entries;
-                heat-weeks: root.heat-weeks;
-                heat-stats: root.heat-stats;
+                week-cells: root.week-cells;
+                month-rows: root.month-rows;
+                range-note: root.range-note;
                 set-period(index) => { root.set-stats-period(index); }
                 shift(delta) => { root.shift-stats(delta); }
             }
